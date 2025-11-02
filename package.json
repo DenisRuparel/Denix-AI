@@ -2,7 +2,7 @@
   "name": "denix-ai",
   "displayName": "Denix AI",
   "description": "AI-powered code explainer",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.105.0"
   },
@@ -19,7 +19,18 @@
         "command": "ai-assistant.explainCode",
         "title": "AI: Explain Selected Code"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Denix AI",
+      "properties": {
+        "denix-ai.openRouterApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your OpenRouter API key. Get one at https://openrouter.ai/keys",
+          "markdownDescription": "Your OpenRouter API key. Get one at [openrouter.ai/keys](https://openrouter.ai/keys)"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
