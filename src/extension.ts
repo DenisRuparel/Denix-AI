@@ -34,7 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
           headers: {
             'Authorization': `Bearer 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`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://github.com/denisruparel/denix-ai', // optional but good practice
+            'HTTP-Referer': 'https://github.com/DenisRuparel/Denix-AI', // optional but good practice
             'X-Title': 'Denix AI Assistant', // optional label
           },
           body: JSON.stringify({
