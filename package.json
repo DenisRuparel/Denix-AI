@@ -28,6 +28,12 @@
           "default": "",
           "description": "Your OpenRouter API key. Get one at https://openrouter.ai/keys",
           "markdownDescription": "Your OpenRouter API key. Get one at [openrouter.ai/keys](https://openrouter.ai/keys)"
+        },
+        "denix-ai.model": {
+          "type": "string",
+          "default": "mistralai/mistral-7b-instruct",
+          "description": "The AI model to use for code explanations. Examples: mistralai/mistral-7b-instruct, meta-llama/llama-3.2-3b-instruct, google/gemini-flash-1.5",
+          "markdownDescription": "The AI model to use for code explanations. Examples: `mistralai/mistral-7b-instruct`, `meta-llama/llama-3.2-3b-instruct`, `google/gemini-flash-1.5`. See [OpenRouter Models](https://openrouter.ai/models) for available models."
         }
       }
     }
