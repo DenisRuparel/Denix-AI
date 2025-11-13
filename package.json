@@ -1,7 +1,7 @@
 {
   "name": "denix-ai",
-  "displayName": "Denix AI",
-  "description": "AI-powered code explainer",
+  "displayName": "Denix - AI",
+  "description": "AI-powered coding assistant with chat interface",
   "version": "0.0.2",
   "engines": {
     "vscode": "^1.105.0"
@@ -10,14 +10,57 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:ai-assistant.explainCode"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "icon": "media/icon.svg",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "denix-ai-sidebar",
+          "title": "Denix - AI",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "denix-ai-sidebar": [
+        {
+          "id": "denix-ai-chat",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "ai-assistant.explainCode",
-        "title": "AI: Explain Selected Code"
+        "command": "denix-ai.newThread",
+        "title": "New Thread",
+        "icon": {
+          "light": "media/icons/thread.svg",
+          "dark": "media/icons/thread.svg"
+        }
+      },
+      {
+        "command": "denix-ai.sendMessage",
+        "title": "Send Message"
+      },
+      {
+        "command": "denix-ai.attachFile",
+        "title": "Attach File"
+      },
+      {
+        "command": "denix-ai.attachImage",
+        "title": "Attach Image"
+      },
+      {
+        "command": "denix-ai.toggleAuto",
+        "title": "Toggle Auto Mode"
+      },
+      {
+        "command": "denix-ai.changeModel",
+        "title": "Change Model"
       }
     ],
     "configuration": {
@@ -31,9 +74,9 @@
         },
         "denix-ai.model": {
           "type": "string",
-          "default": "mistralai/mistral-7b-instruct",
-          "description": "The AI model to use for code explanations. Examples: mistralai/mistral-7b-instruct, meta-llama/llama-3.2-3b-instruct, google/gemini-flash-1.5",
-          "markdownDescription": "The AI model to use for code explanations. Examples: `mistralai/mistral-7b-instruct`, `meta-llama/llama-3.2-3b-instruct`, `google/gemini-flash-1.5`. See [OpenRouter Models](https://openrouter.ai/models) for available models."
+          "default": "anthropic/claude-3.5-sonnet",
+          "description": "The AI model to use for chat. Examples: anthropic/claude-3.5-sonnet, openai/gpt-4, mistralai/mistral-7b-instruct",
+          "markdownDescription": "The AI model to use for chat. Examples: `anthropic/claude-3.5-sonnet`, `openai/gpt-4`, `mistralai/mistral-7b-instruct`. See [OpenRouter Models](https://openrouter.ai/models) for available models."
         }
       }
     }

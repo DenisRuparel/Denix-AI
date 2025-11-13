@@ -45,4 +45,24 @@ const extensionConfig = {
     level: "log", // enables logging required for problem matchers
   },
 };
-module.exports = [ extensionConfig ];
+
+/** @type WebpackConfig */
+const webviewConfig = {
+  mode: 'none',
+  target: 'web',
+  entry: './src/webview/main.js',
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'webview.js',
+    libraryTarget: 'commonjs2'
+  },
+  resolve: {
+    extensions: ['.js']
+  },
+  devtool: 'nosources-source-map',
+  infrastructureLogging: {
+    level: "log"
+  }
+};
+
+module.exports = [ extensionConfig, webviewConfig ];
