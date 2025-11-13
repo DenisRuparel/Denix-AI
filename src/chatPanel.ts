@@ -590,10 +590,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /**
    * Handle image attachment
    */
-  private async _handleImageAttach(data: { path?: string; base64?: string }): Promise<void> {
+  private async _handleImageAttach(data: { path?: string; base64?: string; name?: string }): Promise<void> {
     try {
       let imagePath: string | undefined = data.path;
       let base64Data: string | undefined = data.base64;
+      const providedName = data.name;
 
       if (!imagePath && !base64Data) {
         // Open image picker
@@ -624,21 +625,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      const fileName = imagePath ? path.basename(imagePath) : 'image.png';
+      const fileName = providedName || (imagePath ? path.basename(imagePath) : `image-${Date.now()}.png`);
 
       // Use the same image for thumbnail (in production, you'd create a smaller version)
       // For now, we'll use the full image as thumbnail - it will be scaled by CSS
       const thumbnail = base64Data;
 
       // Check if already attached
-      if (imagePath) {
-        const existingIndex = this._state.attachments.findIndex(
-          att => att.path === imagePath && att.type === 'image'
-        );
+      const existingIndex = this._state.attachments.findIndex(
+        att =>
+          att.type === 'image' &&
+          ((imagePath && att.path === imagePath) || (!imagePath && att.content === base64Data))
+      );
 
-        if (existingIndex >= 0) {
-          return; // Already attached
-        }
+      if (existingIndex >= 0) {
+        return; // Already attached
       }
 
       // Add to attachments
@@ -720,6 +721,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
       case 'changeTab':
         this._state.activeTab = data.payload?.tab || 'thread';
+        this._updateWebviewState();
+        break;
+
+      case 'clearAttachments':
+        this._state.attachments = [];
+        this._saveState();
         this._updateWebviewState();
         break;
 

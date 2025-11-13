@@ -132,6 +132,10 @@
       }
     });
 
+    elements.messageInput?.addEventListener('paste', (event) => {
+      handlePaste(event);
+    });
+
     // Image modal
     elements.imageModalClose?.addEventListener('click', () => {
       closeImageModal();
@@ -163,7 +167,7 @@
     textarea.addEventListener('input', () => {
       if (!isResizing) {
         textarea.style.height = 'auto';
-        const newHeight = Math.min(Math.max(textarea.scrollHeight, 40), 300);
+        const newHeight = Math.min(Math.max(textarea.scrollHeight, 40), 200);
         textarea.style.height = newHeight + 'px';
       }
     });
@@ -218,7 +222,7 @@
       document.addEventListener('mousemove', (e) => {
         if (isResizing) {
           const diff = e.clientY - startY;
-          const newHeight = Math.min(Math.max(startHeight + diff, 40), 300);
+          const newHeight = Math.min(Math.max(startHeight + diff, 40), 200);
           textarea.style.height = newHeight + 'px';
         }
       });
@@ -527,10 +531,10 @@
   function clearAllAttachments() {
     if (state.attachments.length === 0) return;
 
-    // Confirm dialog would go here in production
     state.attachments = [];
     renderAttachments();
     updateSendButtonState();
+    sendMessage({ type: 'command', data: { command: 'clearAttachments' } });
     showToast('All attachments cleared', 'success');
   }
 
@@ -642,6 +646,48 @@
       toast.classList.remove('show');
       setTimeout(() => toast.remove(), 300);
     }, 3000);
+  }
+
+  // Handle paste events for images
+  function handlePaste(event) {
+    const clipboardData = event.clipboardData || window.clipboardData;
+    if (!clipboardData) {
+      return;
+    }
+
+    const items = clipboardData.items;
+    if (!items) {
+      return;
+    }
+
+    let handledImage = false;
+
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file && file.type.startsWith('image/')) {
+          handledImage = true;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64 = reader.result;
+            if (typeof base64 === 'string') {
+              const extension = file.type.split('/')[1] || 'png';
+              const name = file.name || `pasted-image.${extension}`;
+              sendMessage({
+                type: 'imageAttach',
+                data: { base64, name }
+              });
+              showToast('Image attached', 'success');
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    }
+
+    if (handledImage) {
+      event.preventDefault();
+    }
   }
 
   // Send message to extension

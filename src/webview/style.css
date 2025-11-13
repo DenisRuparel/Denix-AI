@@ -522,7 +522,7 @@ body {
   font-size: 14px;
   line-height: 20px;
   resize: none;
-  overflow-y: auto;
+  overflow: hidden;
   transition: all 0.15s ease;
   outline: none;
 }
@@ -544,22 +544,15 @@ body {
   pointer-events: none;
 }
 
-/* Custom scrollbar for textarea */
+/* Hide textarea scrollbar */
 #message-input::-webkit-scrollbar {
-  width: 6px;
+  width: 0;
+  height: 0;
 }
 
-#message-input::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-#message-input::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
-}
-
-#message-input::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+#message-input {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 /* Resize handle */
@@ -819,6 +812,10 @@ body {
 
 .toast-success {
   border-color: #3fb950;
+}
+
+.toast-info {
+  border-color: var(--border-color);
 }
 
 /* Responsive adjustments */
