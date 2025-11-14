@@ -61,6 +61,64 @@
       {
         "command": "denix-ai.changeModel",
         "title": "Change Model"
+      },
+      {
+        "command": "denix-ai.openMemories",
+        "title": "Open Memories"
+      },
+      {
+        "command": "denix-ai.openSettings",
+        "title": "Open Denix Settings"
+      },
+      {
+        "command": "denix-ai.askQuestion",
+        "title": "Quick Ask a Question"
+      },
+      {
+        "command": "denix-ai.enhancePrompt",
+        "title": "Enhance Prompt"
+      },
+      {
+        "command": "denix-ai.clearContext",
+        "title": "Clear Context Attachments"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "denix-ai.openMemories",
+        "key": "ctrl+shift+m",
+        "mac": "cmd+shift+m",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "denix-ai.openSettings",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "denix-ai.askQuestion",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "denix-ai.enhancePrompt",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "denix-ai.clearContext",
+        "key": "ctrl+shift+x",
+        "mac": "cmd+shift+x",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "denix-ai.changeModel",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g",
+        "when": "editorTextFocus"
       }
     ],
     "configuration": {
@@ -77,6 +135,12 @@
           "default": "anthropic/claude-3.5-sonnet",
           "description": "The AI model to use for chat. Examples: anthropic/claude-3.5-sonnet, openai/gpt-4, mistralai/mistral-7b-instruct",
           "markdownDescription": "The AI model to use for chat. Examples: `anthropic/claude-3.5-sonnet`, `openai/gpt-4`, `mistralai/mistral-7b-instruct`. See [OpenRouter Models](https://openrouter.ai/models) for available models."
+        },
+        "denix-ai.maxTokens": {
+          "type": "number",
+          "default": 500,
+          "description": "Maximum number of tokens to generate in the AI response. Lower values use fewer credits. Default: 500 (suitable for free tier)",
+          "markdownDescription": "Maximum number of tokens to generate in the AI response. Lower values use fewer credits. Default: 500 (suitable for free tier). Increase if you have paid credits."
         }
       }
     }

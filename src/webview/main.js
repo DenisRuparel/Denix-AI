@@ -29,11 +29,16 @@
     contextPills: document.getElementById('context-pills'),
     messageInput: document.getElementById('message-input'),
     mentionBtn: document.getElementById('mention-btn'),
+    memoriesBtn: document.getElementById('memories-btn'),
+    rulesBtn: document.getElementById('rules-btn'),
+    selectionBtn: document.getElementById('selection-btn'),
     trashBtn: document.getElementById('trash-btn'),
     copyBtn: document.getElementById('copy-btn'),
     formatTextBtn: document.getElementById('format-text-btn'),
     autoBtn: document.getElementById('auto-btn'),
+    askQuestionBtn: document.getElementById('ask-question-btn'),
     formatBtn: document.getElementById('format-btn'),
+    enhanceBtn: document.getElementById('enhance-btn'),
     modelBtn: document.getElementById('model-btn'),
     attachBtn: document.getElementById('attach-btn'),
     settingsBtn: document.getElementById('settings-btn'),
@@ -75,6 +80,18 @@
       showMentionPicker();
     });
 
+    elements.memoriesBtn?.addEventListener('click', () => {
+      sendMessage({ type: 'command', data: { command: 'openMemories' } });
+    });
+
+    elements.rulesBtn?.addEventListener('click', () => {
+      sendMessage({ type: 'command', data: { command: 'openSettings' } });
+    });
+
+    elements.selectionBtn?.addEventListener('click', () => {
+      sendMessage({ type: 'command', data: { command: 'toggleSelection' } });
+    });
+
     elements.trashBtn?.addEventListener('click', () => {
       clearAllAttachments();
     });
@@ -92,8 +109,16 @@
       sendMessage({ type: 'command', data: { command: 'toggleAuto' } });
     });
 
+    elements.askQuestionBtn?.addEventListener('click', () => {
+      sendMessage({ type: 'command', data: { command: 'askQuestion' } });
+    });
+
     elements.formatBtn?.addEventListener('click', () => {
       showFormatOptions();
+    });
+
+    elements.enhanceBtn?.addEventListener('click', () => {
+      sendMessage({ type: 'command', data: { command: 'enhancePrompt' } });
     });
 
     elements.modelBtn?.addEventListener('click', () => {
@@ -159,83 +184,12 @@
     const textarea = elements.messageInput;
     if (!textarea) return;
 
-    let isResizing = false;
-    let startY = 0;
-    let startHeight = 0;
-
     // Auto-resize on input
     textarea.addEventListener('input', () => {
-      if (!isResizing) {
-        textarea.style.height = 'auto';
-        const newHeight = Math.min(Math.max(textarea.scrollHeight, 40), 200);
-        textarea.style.height = newHeight + 'px';
-      }
+      textarea.style.height = 'auto';
+      const newHeight = Math.min(Math.max(textarea.scrollHeight, 40), 200);
+      textarea.style.height = newHeight + 'px';
     });
-
-    // Make textarea resizable by dragging from bottom-right corner
-    const resizeHandle = document.createElement('div');
-    resizeHandle.className = 'textarea-resize-handle';
-    resizeHandle.innerHTML = '⋰';
-    resizeHandle.style.cssText = `
-      position: absolute;
-      bottom: 2px;
-      right: 2px;
-      width: 20px;
-      height: 20px;
-      cursor: nwse-resize;
-      color: var(--text-secondary);
-      font-size: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0.5;
-      transition: opacity 0.2s;
-      z-index: 10;
-      user-select: none;
-    `;
-
-    const inputCenter = textarea.parentElement;
-    if (inputCenter) {
-      inputCenter.style.position = 'relative';
-      inputCenter.appendChild(resizeHandle);
-
-      resizeHandle.addEventListener('mouseenter', () => {
-        resizeHandle.style.opacity = '1';
-      });
-
-      resizeHandle.addEventListener('mouseleave', () => {
-        if (!isResizing) {
-          resizeHandle.style.opacity = '0.5';
-        }
-      });
-
-      resizeHandle.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        isResizing = true;
-        startY = e.clientY;
-        startHeight = textarea.offsetHeight;
-        resizeHandle.style.opacity = '1';
-        document.body.style.cursor = 'nwse-resize';
-        document.body.style.userSelect = 'none';
-      });
-
-      document.addEventListener('mousemove', (e) => {
-        if (isResizing) {
-          const diff = e.clientY - startY;
-          const newHeight = Math.min(Math.max(startHeight + diff, 40), 200);
-          textarea.style.height = newHeight + 'px';
-        }
-      });
-
-      document.addEventListener('mouseup', () => {
-        if (isResizing) {
-          isResizing = false;
-          resizeHandle.style.opacity = '0.5';
-          document.body.style.cursor = '';
-          document.body.style.userSelect = '';
-        }
-      });
-    }
   }
 
   // Handle messages from extension
@@ -243,6 +197,9 @@
     switch (message.type) {
       case 'updateState':
         updateState(message.data);
+        break;
+      case 'aiResponse':
+        addAIMessage(message.data);
         break;
       case 'typingIndicator':
         showTypingIndicator(message.data.active);
@@ -252,6 +209,16 @@
         break;
       case 'error':
         showError(message.data.message);
+        break;
+      case 'enhancedPrompt':
+        if (message.data) {
+          elements.messageInput.value = message.data;
+          elements.messageInput.focus();
+          updateSendButtonState();
+        }
+        break;
+      case 'getCurrentPrompt':
+        sendMessage({ type: 'currentPrompt', data: elements.messageInput.value });
         break;
       default:
         console.log('Unknown message type:', message.type);
@@ -350,10 +317,19 @@
 
     elements.contextPills.innerHTML = '';
 
+    // Render user attachments
     state.attachments.forEach((att, index) => {
-      const pill = createAttachmentPill(att, index);
+      const pill = createAttachmentPill(att, index, false);
       elements.contextPills.appendChild(pill);
     });
+
+    // Render context attachments (memories, rules, selection)
+    if (state.contextAttachments) {
+      state.contextAttachments.forEach((att, index) => {
+        const pill = createAttachmentPill(att, index, true);
+        elements.contextPills.appendChild(pill);
+      });
+    }
 
     // Add current file if available and not already attached
     if (state.currentFile && !state.attachments.some(a => a.path === state.currentFile)) {
@@ -367,10 +343,13 @@
   }
 
   // Create attachment pill
-  function createAttachmentPill(att, index) {
+  function createAttachmentPill(att, index, isContext = false) {
     const pill = document.createElement('div');
-    pill.className = 'context-pill';
+    pill.className = `context-pill ${isContext ? 'context-pill-context' : ''}`;
     pill.setAttribute('data-index', index);
+    if (isContext) {
+      pill.setAttribute('data-context-id', att.name || `context-${index}`);
+    }
 
     if (att.type === 'file') {
       pill.innerHTML = `
@@ -413,7 +392,12 @@
       // Add fade-out animation
       pill.classList.add('removing');
       setTimeout(() => {
-        sendMessage({ type: 'removeAttachment', data: { index } });
+        if (isContext) {
+          const contextId = pill.getAttribute('data-context-id');
+          sendMessage({ type: 'dismissContext', data: { id: contextId } });
+        } else {
+          sendMessage({ type: 'removeAttachment', data: { index } });
+        }
       }, 150);
     });
 

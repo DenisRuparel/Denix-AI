@@ -350,6 +350,10 @@ body {
   bottom: 0;
 }
 
+.input-area:focus-within {
+  border-top-color: var(--accent-blue);
+}
+
 /* Top Row: Pills Row */
 .pills-row {
   display: flex;
@@ -358,21 +362,14 @@ body {
   min-height: 32px;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .pills-row::-webkit-scrollbar {
-  height: 4px;
-}
-
-.pills-row::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.pills-row::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 2px;
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .quick-actions {
@@ -508,6 +505,8 @@ body {
 .input-wrapper {
   position: relative;
   width: 100%;
+  border: none;
+  background: transparent;
 }
 
 #message-input {
@@ -522,9 +521,10 @@ body {
   font-size: 14px;
   line-height: 20px;
   resize: none;
-  overflow: hidden;
+  overflow-y: hidden;
   transition: all 0.15s ease;
   outline: none;
+  box-shadow: none;
 }
 
 #message-input::placeholder {
@@ -533,15 +533,11 @@ body {
 
 #message-input:focus {
   outline: none;
+  box-shadow: none;
 }
 
 #message-input:focus::before {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border: 1px solid var(--accent-blue);
-  border-radius: 6px;
-  pointer-events: none;
+  display: none;
 }
 
 /* Hide textarea scrollbar */
@@ -555,48 +551,41 @@ body {
   -ms-overflow-style: none;
 }
 
-/* Resize handle */
+/* Resize handle - removed */
 .textarea-resize-handle {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 20px;
-  height: 20px;
-  cursor: nwse-resize;
-  color: var(--text-secondary);
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.4;
-  transition: opacity 0.15s;
-  z-index: 10;
-  user-select: none;
-  pointer-events: auto;
+  display: none !important;
 }
 
-.textarea-resize-handle:hover {
-  opacity: 0.7;
-}
-
-/* Bottom Row: Actions Row */
+/* Bottom Row: Actions Row - All buttons inline */
 .actions-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.actions-row::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .actions-left {
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .actions-right {
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-shrink: 0;
   margin-left: auto;
 }
 
@@ -831,7 +820,8 @@ body {
   }
 
   .actions-row {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
   }
 
   .context-pill {
@@ -869,7 +859,6 @@ body {
 }
 
 #message-input:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: -2px;
-  border-radius: 6px;
+  outline: none;
+  border: none;
 }

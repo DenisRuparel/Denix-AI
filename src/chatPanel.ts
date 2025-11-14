@@ -1,6 +1,14 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { MemoriesManager, MemoryEntry } from './features/memories';
+import { GuidelinesManager } from './features/guidelines';
+import { RulesManager, RuleFile } from './features/rules';
+import { SelectionWatcher, SelectionContext } from './features/selection';
+import { ContextManager } from './storage/contextManager';
+import { QuickQuestionService, QuickQuestionTemplate } from './features/askQuestion';
+import { SettingsPanel } from './ui/settingsPanel';
+import { QuickAskPanel } from './ui/quickAsk';
 
 /**
  * OpenRouter API response structure
@@ -37,7 +45,8 @@ interface ChatResponse {
 export interface WebviewMessage {
   type: 'userMessage' | 'aiResponse' | 'command' | 'fileAttach' | 'imageAttach' | 
         'modelChange' | 'activeFileChange' | 'removeAttachment' | 'previewImage' |
-        'initialize' | 'updateState' | 'error' | 'typingIndicator';
+        'initialize' | 'updateState' | 'error' | 'typingIndicator' | 
+        'getCurrentPrompt' | 'currentPrompt' | 'dismissContext' | 'enhancedPrompt';
   data?: any;
   payload?: any;
 }
@@ -45,12 +54,17 @@ export interface WebviewMessage {
 /**
  * Attachment data structure
  */
+export type AttachmentType = 'file' | 'image' | 'memory' | 'rule' | 'guideline' | 'selection';
+
 export interface Attachment {
-  type: 'file' | 'image';
-  path: string;
+  id: string;
+  type: AttachmentType;
   name: string;
-  content?: string; // For files: file content, for images: base64 data
+  path?: string;
+  content?: string; // For files, image base64, memory/rule text
   thumbnail?: string; // For images: base64 thumbnail
+  description?: string;
+  auto?: boolean;
 }
 
 /**
@@ -86,11 +100,34 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _state: ChatState;
   private _disposables: vscode.Disposable[] = [];
   private _activeEditorListener?: vscode.Disposable;
+  private readonly _memoriesManager: MemoriesManager;
+  private readonly _rulesManager: RulesManager;
+  private readonly _guidelinesManager: GuidelinesManager;
+  private readonly _selectionWatcher: SelectionWatcher;
+  private readonly _contextManager: ContextManager;
+  private readonly _quickQuestionService: QuickQuestionService;
+  private _contextAttachments: Attachment[] = [];
+  private _dismissedContextIds = new Set<string>();
+  private _settingsPanel: SettingsPanel;
+  private _lastKeywords: string[] = [];
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
-    private readonly _context: vscode.ExtensionContext
+    private readonly _context: vscode.ExtensionContext,
+    memoriesManager: MemoriesManager,
+    rulesManager: RulesManager,
+    guidelinesManager: GuidelinesManager,
+    selectionWatcher: SelectionWatcher,
+    contextManager: ContextManager,
+    quickQuestionService: QuickQuestionService
   ) {
+    this._memoriesManager = memoriesManager;
+    this._rulesManager = rulesManager;
+    this._guidelinesManager = guidelinesManager;
+    this._selectionWatcher = selectionWatcher;
+    this._contextManager = contextManager;
+    this._quickQuestionService = quickQuestionService;
+
     // Initialize state
     this._state = {
       threadId: `thread-${Date.now()}`,
@@ -102,11 +139,39 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       currentFile: undefined
     };
 
+    this._settingsPanel = new SettingsPanel(this._extensionUri, this._rulesManager, this._guidelinesManager);
+
     // Load persisted state
     this._loadState();
 
     // Listen for active editor changes
     this._setupActiveEditorListener();
+
+    this._registerWatchers();
+    // Prime context attachments
+    this._updateContextAttachments().catch(console.error);
+  }
+
+  private _registerWatchers(): void {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      return;
+    }
+
+    const patterns = [
+      new vscode.RelativePattern(workspaceFolder, '.denix/memories.md'),
+      new vscode.RelativePattern(workspaceFolder, '.denix/guidelines.txt'),
+      new vscode.RelativePattern(workspaceFolder, '.denix/rules/**/*.md')
+    ];
+
+    for (const pattern of patterns) {
+      const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+      const refresh = () => this._updateContextAttachments().catch(console.error);
+      watcher.onDidCreate(refresh, this, this._disposables);
+      watcher.onDidChange(refresh, this, this._disposables);
+      watcher.onDidDelete(refresh, this, this._disposables);
+      this._disposables.push(watcher);
+    }
   }
 
   /**
@@ -256,6 +321,24 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                     <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C12.42 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 14C4.69 14 2 11.31 2 8C2 4.69 4.69 2 8 2C11.31 2 14 4.69 14 8C14 11.31 11.31 14 8 14Z"/>
                   </svg>
                 </button>
+                <button class="icon-btn" id="memories-btn" aria-label="Memories" title="Memories">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <path d="M5 6H11M5 9H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" id="rules-btn" aria-label="Rules" title="Rules and Guidelines">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <path d="M5 5H11M5 8H11M5 11H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" id="selection-btn" aria-label="Selected Text" title="Selected Text">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <rect x="2" y="4" width="12" height="8" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <path d="M6 2V6M10 2V6M6 14V10M10 14V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                </button>
                 <button class="icon-btn" id="trash-btn" aria-label="Clear" title="Clear all">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M5 2V1C5 0.447715 5.44772 0 6 0H10C10.5523 0 11 0.447715 11 1V2H14C14.5523 2 15 2.44772 15 3C15 3.55228 14.5523 4 14 4H13V13C13 14.1046 12.1046 15 11 15H5C3.89543 15 3 14.1046 3 13V4H2C1.44772 4 1 3.55228 1 3C1 2.44772 1.44772 2 2 2H5ZM6 1V2H10V1H6ZM5 4V13H11V4H5Z"/>
@@ -293,9 +376,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                   <span class="toggle-indicator">◉</span>
                   <span>Auto</span>
                 </button>
+                <button class="icon-btn" id="ask-question-btn" aria-label="Ask Question" title="Ask Question">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <path d="M8 5V8M8 11H8.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                </button>
                 <button class="icon-btn" id="format-btn" aria-label="Format" title="Format">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M2 2H14M2 8H14M2 14H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" id="enhance-btn" aria-label="Enhance Prompt" title="Enhance Prompt">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 1L10 6L15 8L10 10L8 15L6 10L1 8L6 6L8 1Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
                   </svg>
                 </button>
                 <button class="model-btn" id="model-btn" aria-label="Select model" title="Select model">
@@ -378,6 +472,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this._handleCommand(message.data);
         break;
 
+      case 'getCurrentPrompt':
+        const input = this._view?.webview;
+        if (input) {
+          this._sendMessageToWebview({
+            type: 'currentPrompt',
+            data: '' // Will be filled by webview
+          });
+        }
+        break;
+
+      case 'dismissContext':
+        this._dismissedContextIds.add(message.data.id);
+        await this._updateContextAttachments();
+        break;
+
       default:
         console.warn('Unknown message type:', message.type);
     }
@@ -389,7 +498,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async _handleUserMessage(data: { content: string; attachments?: Attachment[] }): Promise<void> {
     const { content, attachments = [] } = data;
 
-    if (!content.trim() && attachments.length === 0) {
+    // Merge user attachments with context attachments
+    const allAttachments = [...attachments, ...this._contextAttachments];
+
+    if (!content.trim() && allAttachments.length === 0) {
       return;
     }
 
@@ -398,7 +510,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       id: `msg-${Date.now()}`,
       role: 'user',
       content,
-      attachments: [...attachments],
+      attachments: allAttachments,
       timestamp: Date.now()
     };
 
@@ -412,7 +524,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       data: { active: true }
     });
 
-    // Clear attachments after sending
+    // Clear user attachments after sending (keep context attachments)
     this._state.attachments = [];
     this._updateWebviewState();
 
@@ -421,38 +533,98 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const config = vscode.workspace.getConfiguration('denix-ai');
       const apiKey = config.get<string>('openRouterApiKey');
       const model = this._state.selectedModel;
+      const maxTokens = config.get<number>('maxTokens', 500);
 
       if (!apiKey) {
         throw new Error('OpenRouter API key not configured. Please set it in settings.');
       }
 
+      // Build context from memories, guidelines, rules
+      const keywords = this._extractKeywords();
+      const context = await this._contextManager.buildContext(keywords);
+      
+      // Build system message with guidelines
+      let systemContent = 'You are an expert AI coding assistant. Help users with code explanations, debugging, and development tasks.';
+      if (context.guidelines) {
+        systemContent += `\n\n## User Guidelines:\n${context.guidelines}`;
+      }
+      if (context.relevantMemories.length > 0) {
+        systemContent += `\n\n## Project Memories:\n${context.relevantMemories.join('\n\n')}`;
+      }
+
       // Build messages array for API
-      const apiMessages: Array<{ role: string; content: string }> = [
+      const apiMessages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
         {
           role: 'system',
-          content: 'You are an expert AI coding assistant. Help users with code explanations, debugging, and development tasks.'
+          content: systemContent
         }
       ];
+
+      // Check if model supports vision (images)
+      const isVisionModel = this._isVisionModel(model);
 
       // Add conversation history
       for (const msg of this._state.messages) {
         let messageContent = msg.content;
+        const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+        
+        // Add text content
+        if (messageContent.trim()) {
+          if (isVisionModel) {
+            contentParts.push({ type: 'text', text: messageContent });
+          } else {
+            // For non-vision models, keep text as string
+            messageContent = messageContent;
+          }
+        }
         
         // Add attachment context
         if (msg.attachments && msg.attachments.length > 0) {
           for (const att of msg.attachments) {
             if (att.type === 'file' && att.content) {
-              messageContent += `\n\n[File: ${att.name}]\n${att.content}`;
+              const fileContext = `\n\n[File: ${att.name}]\n${att.content}`;
+              if (isVisionModel) {
+                // Update the last text part or add new one
+                if (contentParts.length > 0 && contentParts[contentParts.length - 1].type === 'text') {
+                  contentParts[contentParts.length - 1].text += fileContext;
+                } else {
+                  contentParts.push({ type: 'text', text: fileContext });
+                }
+              } else {
+                messageContent += fileContext;
+              }
             } else if (att.type === 'image' && att.content) {
-              messageContent += `\n\n[Image: ${att.name}]`;
+              if (isVisionModel) {
+                // For vision models, add image as image_url object
+                // Extract base64 data (remove data:image/...;base64, prefix if present)
+                let imageUrl = att.content;
+                if (!imageUrl.startsWith('data:')) {
+                  imageUrl = `data:image/png;base64,${imageUrl}`;
+                }
+                contentParts.push({
+                  type: 'image_url',
+                  image_url: { url: imageUrl }
+                });
+              } else {
+                // For non-vision models, just mention the image
+                messageContent += `\n\n[Image: ${att.name}]`;
+              }
             }
           }
         }
 
-        apiMessages.push({
-          role: msg.role,
-          content: messageContent
-        });
+        // Build message based on model type
+        if (isVisionModel && contentParts.length > 0) {
+          apiMessages.push({
+            role: msg.role,
+            content: contentParts
+          });
+        } else {
+          apiMessages.push({
+            role: msg.role,
+            content: messageContent
+          });
+        }
       }
 
       // Call OpenRouter API
@@ -468,13 +640,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           model: model,
           messages: apiMessages,
           temperature: 0.7,
-          max_tokens: 2000
+          max_tokens: maxTokens
         })
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`API request failed: HTTP ${response.status} - ${errorText}`);
+        let errorMessage = `API request failed: HTTP ${response.status}`;
+        
+        // Parse error response for better messages
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.error) {
+            if (response.status === 402) {
+              // Credit/balance error
+              errorMessage = `**Insufficient Credits**\n\n${errorData.error.message || 'You need more credits to make this request.'}\n\n**Solution:**\n- Reduce max_tokens in settings (currently: ${maxTokens})\n- Add credits at https://openrouter.ai/settings/credits\n- Or upgrade to a paid account`;
+            } else {
+              errorMessage = errorData.error.message || errorMessage;
+            }
+          }
+        } catch {
+          // If parsing fails, use the raw error text
+          errorMessage = `${errorMessage} - ${errorText}`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json() as ChatResponse;
@@ -572,6 +762,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
       // Add to attachments
       const attachment: Attachment = {
+        id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         type: 'file',
         path: filePath,
         name: fileName,
@@ -644,6 +835,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
       // Add to attachments
       const attachment: Attachment = {
+        id: `image-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         type: 'image',
         path: imagePath || '',
         name: fileName,
@@ -717,6 +909,39 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this._state.autoMode = !this._state.autoMode;
         this._saveState();
         this._updateWebviewState();
+        break;
+
+      case 'openMemories':
+        await this.openMemories();
+        break;
+
+      case 'openSettings':
+        await this.openSettings();
+        break;
+
+      case 'askQuestion':
+        await this.openQuickAsk();
+        break;
+
+      case 'enhancePrompt':
+        await this.enhanceCurrentPrompt();
+        break;
+
+      case 'toggleSelection':
+        // Toggle selection context
+        const selection = this._selectionWatcher.getSelection();
+        if (selection) {
+          if (this._dismissedContextIds.has('selection')) {
+            this._dismissedContextIds.delete('selection');
+          } else {
+            this._dismissedContextIds.add('selection');
+          }
+          await this._updateContextAttachments();
+        }
+        break;
+
+      case 'selectModel':
+        await this.selectModel();
         break;
 
       case 'changeTab':
@@ -795,9 +1020,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private _updateWebviewState(): void {
     if (this._view) {
+      // Include context attachments in state
+      const stateWithContext = {
+        ...this._state,
+        contextAttachments: this._contextAttachments,
+        hasSelection: this._selectionWatcher.getSelection() !== null
+      };
       this._sendMessageToWebview({
         type: 'updateState',
-        data: this._state
+        data: stateWithContext
       });
     }
   }
@@ -838,6 +1069,272 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
     return text;
+  }
+
+
+  /**
+   * Update context attachments from memories, rules, selection
+   */
+  private async _updateContextAttachments(): Promise<void> {
+    const keywords = this._extractKeywords();
+    const context = await this._contextManager.buildContext(keywords);
+    
+    this._contextAttachments = [];
+    
+    // Add relevant memories
+    if (context.relevantMemories.length > 0) {
+      this._contextAttachments.push({
+        id: 'memories',
+        type: 'file',
+        path: '.denix/memories.md',
+        name: 'Memories',
+        content: context.relevantMemories.join('\n\n')
+      });
+    }
+    
+    // Add active rules
+    for (const rule of context.rules) {
+      if (!this._dismissedContextIds.has(`rule-${rule.name}`)) {
+        this._contextAttachments.push({
+          id: `rule-${rule.name}`,
+          type: 'file',
+          path: rule.path,
+          name: `@${rule.name}`,
+          content: rule.content
+        });
+      }
+    }
+    
+    // Add selection if available
+    if (context.selection && !this._dismissedContextIds.has('selection')) {
+      this._contextAttachments.push({
+        id: 'selection',
+        type: 'file',
+        path: context.selection.uri,
+        name: `${context.selection.fileName}:${context.selection.startLine}-${context.selection.endLine}`,
+        content: context.selection.text
+      });
+    }
+    
+    this._updateWebviewState();
+  }
+
+  /**
+   * Extract keywords from current conversation for context matching
+   */
+  private _extractKeywords(): string[] {
+    const keywords: string[] = [];
+    const lastMessages = this._state.messages.slice(-3);
+    
+    for (const msg of lastMessages) {
+      const words = msg.content.toLowerCase().split(/\s+/);
+      keywords.push(...words.filter(w => w.length > 4));
+    }
+    
+    return [...new Set(keywords)];
+  }
+
+  /**
+   * Check if the model supports vision (images)
+   */
+  private _isVisionModel(model: string): boolean {
+    const visionModels = [
+      'gpt-4-vision',
+      'gpt-4-turbo',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'claude-3-opus',
+      'claude-3-sonnet',
+      'claude-3-haiku',
+      'claude-3-5-sonnet',
+      'claude-3-5-haiku',
+      'openai/gpt-4-vision-preview',
+      'openai/gpt-4-turbo',
+      'openai/gpt-4o',
+      'openai/gpt-4o-mini',
+      'anthropic/claude-3-opus',
+      'anthropic/claude-3-sonnet',
+      'anthropic/claude-3-haiku',
+      'anthropic/claude-3-5-sonnet',
+      'anthropic/claude-3-5-haiku'
+    ];
+    
+    return visionModels.some(vm => model.toLowerCase().includes(vm.toLowerCase()));
+  }
+
+  // Public methods for commands
+  public async openMemories(): Promise<void> {
+    await this._memoriesManager.openMemoriesDocument();
+  }
+
+  public async openSettings(): Promise<void> {
+    await this._settingsPanel.show();
+  }
+
+  public async openQuickAsk(): Promise<void> {
+    const templates = this._quickQuestionService.getTemplates();
+    const selection = this._selectionWatcher.getSelection();
+    const context = selection ? `File: ${selection.fileName}\nLinescls: ${selection.startLine}-${selection.endLine}\n\n${selection.text}` : '';
+    
+    const quickAsk = new QuickAskPanel(this._extensionUri, async (prompt: string) => {
+      const fullPrompt = this._quickQuestionService.buildPrompt('', prompt);
+      await this._handleUserMessage({ content: fullPrompt, attachments: [] });
+    });
+    
+    quickAsk.show(templates, context);
+  }
+
+  public async enhanceCurrentPrompt(): Promise<void> {
+    if (!this._view) {
+      return;
+    }
+
+    // Get current prompt from webview
+    const currentPrompt = await new Promise<string>((resolve) => {
+      const listener = this._view!.webview.onDidReceiveMessage((message) => {
+        if (message.type === 'currentPrompt') {
+          listener.dispose();
+          resolve(message.data);
+        }
+      });
+      this._view!.webview.postMessage({ type: 'getCurrentPrompt' });
+    });
+
+    if (!currentPrompt || !currentPrompt.trim()) {
+      vscode.window.showWarningMessage('No prompt to enhance');
+      return;
+    }
+
+    try {
+      const enhanced = await this.invokePromptEnhancement(currentPrompt);
+      this._view.webview.postMessage({
+        type: 'enhancedPrompt',
+        data: enhanced
+      });
+    } catch (error: any) {
+      vscode.window.showErrorMessage(`Failed to enhance prompt: ${error.message}`);
+    }
+  }
+
+  public async invokePromptEnhancement(original: string): Promise<string> {
+    const config = vscode.workspace.getConfiguration('denix-ai');
+    const apiKey = config.get<string>('openRouterApiKey');
+    const model = this._state.selectedModel;
+    const maxTokens = config.get<number>('maxTokens', 500);
+
+    if (!apiKey) {
+      throw new Error('OpenRouter API key not configured');
+    }
+
+    const enhancementRequest = `You are a prompt engineer. Enhance this user prompt to be more specific and effective. Return only the enhanced prompt, no explanations.
+
+Original: "${original}"
+
+Make it:
+1. More specific and detailed
+2. Include relevant context
+3. Break down into clear steps
+4. Add any missing requirements`;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/DenisRuparel/Denix-AI',
+        'X-Title': 'Denix AI Assistant',
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: 'system', content: 'You are a prompt engineer. Return only the enhanced prompt, no explanations.' },
+          { role: 'user', content: enhancementRequest }
+        ],
+        temperature: 0.7,
+        max_tokens: Math.min(maxTokens, 500) // Cap at 500 for enhancement
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `API request failed: HTTP ${response.status}`;
+      
+      // Parse error response for better messages
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.error) {
+          if (response.status === 402) {
+            errorMessage = `**Insufficient Credits**\n\n${errorData.error.message || 'You need more credits to make this request.'}\n\nAdd credits at https://openrouter.ai/settings/credits`;
+          } else {
+            errorMessage = errorData.error.message || errorMessage;
+          }
+        }
+      } catch {
+        errorMessage = `${errorMessage} - ${errorText}`;
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json() as ChatResponse;
+    const enhanced = data.choices?.[0]?.message?.content || original;
+    return enhanced.trim();
+  }
+
+  public handleSelectionChanged(): void {
+    this._updateContextAttachments();
+  }
+
+  public clearContextAttachments(): void {
+    this._contextAttachments = [];
+    this._dismissedContextIds.clear();
+    this._updateWebviewState();
+  }
+
+  public createNewThread(): void {
+    this._state.threadId = `thread-${Date.now()}`;
+    this._state.messages = [];
+    this._state.attachments = [];
+    this._contextAttachments = [];
+    this._dismissedContextIds.clear();
+    this._saveState();
+    this._updateWebviewState();
+  }
+
+  public async triggerFileAttach(): Promise<void> {
+    await this._handleFileAttach({});
+  }
+
+  public async triggerImageAttach(): Promise<void> {
+    await this._handleImageAttach({});
+  }
+
+  public toggleAutoMode(): void {
+    this._state.autoMode = !this._state.autoMode;
+    this._saveState();
+    this._updateWebviewState();
+  }
+
+  public async selectModel(): Promise<void> {
+    const model = await vscode.window.showQuickPick([
+      { label: 'GPT-4o (Vision)', value: 'openai/gpt-4o' },
+      { label: 'GPT-4 Turbo (Vision)', value: 'openai/gpt-4-turbo' },
+      { label: 'GPT-4o Mini (Vision)', value: 'openai/gpt-4o-mini' },
+      { label: 'Claude 3.5 Sonnet (Vision)', value: 'anthropic/claude-3.5-sonnet' },
+      { label: 'Claude 3 Opus (Vision)', value: 'anthropic/claude-3-opus' },
+      { label: 'Claude 3 Sonnet (Vision)', value: 'anthropic/claude-3-sonnet' },
+      { label: 'Claude 3 Haiku (Vision)', value: 'anthropic/claude-3-haiku' },
+      { label: 'GPT-4', value: 'openai/gpt-4' },
+      { label: 'GPT-3.5 Turbo', value: 'openai/gpt-3.5-turbo' },
+      { label: 'Mistral 7B', value: 'mistralai/mistral-7b-instruct' }
+    ], {
+      placeHolder: 'Select AI Model (Vision models support images)'
+    });
+    if (model) {
+      this._state.selectedModel = model.value;
+      this._saveState();
+      this._updateWebviewState();
+    }
   }
 
   /**
