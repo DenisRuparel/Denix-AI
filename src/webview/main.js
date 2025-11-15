@@ -32,12 +32,8 @@
     memoriesBtn: document.getElementById('memories-btn'),
     rulesBtn: document.getElementById('rules-btn'),
     selectionBtn: document.getElementById('selection-btn'),
-    trashBtn: document.getElementById('trash-btn'),
-    copyBtn: document.getElementById('copy-btn'),
-    formatTextBtn: document.getElementById('format-text-btn'),
     autoBtn: document.getElementById('auto-btn'),
     askQuestionBtn: document.getElementById('ask-question-btn'),
-    formatBtn: document.getElementById('format-btn'),
     enhanceBtn: document.getElementById('enhance-btn'),
     modelBtn: document.getElementById('model-btn'),
     attachBtn: document.getElementById('attach-btn'),
@@ -92,18 +88,6 @@
       sendMessage({ type: 'command', data: { command: 'toggleSelection' } });
     });
 
-    elements.trashBtn?.addEventListener('click', () => {
-      clearAllAttachments();
-    });
-
-    elements.copyBtn?.addEventListener('click', () => {
-      copyLastMessage();
-    });
-
-    elements.formatTextBtn?.addEventListener('click', () => {
-      showFormatTextOptions();
-    });
-
     // Bottom row actions
     elements.autoBtn?.addEventListener('click', () => {
       sendMessage({ type: 'command', data: { command: 'toggleAuto' } });
@@ -111,10 +95,6 @@
 
     elements.askQuestionBtn?.addEventListener('click', () => {
       sendMessage({ type: 'command', data: { command: 'askQuestion' } });
-    });
-
-    elements.formatBtn?.addEventListener('click', () => {
-      showFormatOptions();
     });
 
     elements.enhanceBtn?.addEventListener('click', () => {
@@ -522,12 +502,6 @@
     showToast('All attachments cleared', 'success');
   }
 
-  // Show format text options
-  function showFormatTextOptions() {
-    // Placeholder - would show text formatting menu
-    console.log('Show format text options');
-    showToast('Format text options', 'info');
-  }
 
   // Show settings
   function showSettings() {
@@ -587,22 +561,6 @@
     console.log('Show mention picker');
   }
 
-  // Copy last message
-  function copyLastMessage() {
-    if (state.messages.length > 0) {
-      const lastMsg = state.messages[state.messages.length - 1];
-      navigator.clipboard.writeText(lastMsg.content).then(() => {
-        // Show toast notification
-        showToast('Copied to clipboard');
-      });
-    }
-  }
-
-  // Show format options
-  function showFormatOptions() {
-    // Placeholder - would show format options
-    console.log('Show format options');
-  }
 
   // Show more options
   function showMoreOptions() {

@@ -340,18 +340,38 @@ body {
    ============================================ */
 
 .input-area {
-  background: var(--input-bg);
-  border-top: 1px solid var(--border-color);
-  padding: 12px;
+  background: var(--background-primary);
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
   position: sticky;
   bottom: 0;
+  isolation: isolate; /* Create new stacking context */
 }
 
-.input-area:focus-within {
-  border-top-color: var(--accent-blue);
+/* Input container with rounded border */
+.input-area::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  pointer-events: none;
+  transition: border-color 0.15s ease;
+  z-index: 0;
+}
+
+.input-area:focus-within::after {
+  border-color: var(--accent-blue);
+}
+
+.input-area > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* Top Row: Pills Row */
@@ -364,6 +384,8 @@ body {
   overflow-y: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  padding: 8px 12px 0 12px;
+  margin-bottom: 4px;
 }
 
 .pills-row::-webkit-scrollbar {
@@ -507,6 +529,8 @@ body {
   width: 100%;
   border: none;
   background: transparent;
+  padding: 0 12px;
+  margin: 4px 0;
 }
 
 #message-input {
@@ -566,6 +590,8 @@ body {
   overflow-y: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  padding: 0 12px 8px 12px;
+  margin-top: 4px;
 }
 
 .actions-row::-webkit-scrollbar {

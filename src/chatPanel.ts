@@ -339,22 +339,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                     <path d="M6 2V6M10 2V6M6 14V10M10 14V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                   </svg>
                 </button>
-                <button class="icon-btn" id="trash-btn" aria-label="Clear" title="Clear all">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M5 2V1C5 0.447715 5.44772 0 6 0H10C10.5523 0 11 0.447715 11 1V2H14C14.5523 2 15 2.44772 15 3C15 3.55228 14.5523 4 14 4H13V13C13 14.1046 12.1046 15 11 15H5C3.89543 15 3 14.1046 3 13V4H2C1.44772 4 1 3.55228 1 3C1 2.44772 1.44772 2 2 2H5ZM6 1V2H10V1H6ZM5 4V13H11V4H5Z"/>
-                  </svg>
-                </button>
-                <button class="icon-btn" id="copy-btn" aria-label="Copy" title="Copy">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <rect x="4" y="4" width="8" height="8" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                    <path d="M4 4H2V14H12V12" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                  </svg>
-                </button>
-                <button class="icon-btn" id="format-text-btn" aria-label="Format text" title="Format text">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M4 2V14M8 2V14M12 2V14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  </svg>
-                </button>
               </div>
               <div class="context-pills" id="context-pills"></div>
             </div>
@@ -380,11 +364,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" fill="none"/>
                     <path d="M8 5V8M8 11H8.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  </svg>
-                </button>
-                <button class="icon-btn" id="format-btn" aria-label="Format" title="Format">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M2 2H14M2 8H14M2 14H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                   </svg>
                 </button>
                 <button class="icon-btn" id="enhance-btn" aria-label="Enhance Prompt" title="Enhance Prompt">
