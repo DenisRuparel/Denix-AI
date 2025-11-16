@@ -252,26 +252,98 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           <!-- Header -->
           <div class="header">
             <div class="header-left">
-              <span class="app-name">New Agent</span>
-              <button class="icon-btn menu-btn" id="menu-btn" title="Menu">
+              <button class="icon-btn hamburger-btn" id="hamburger-btn" title="Threads">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <span class="project-title">Project summary: Denix AI</span>
+            </div>
+            <div class="header-right">
+              <button class="icon-btn menu-btn" id="menu-btn" title="More options">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <circle cx="8" cy="3" r="1.5"/>
                   <circle cx="8" cy="8" r="1.5"/>
                   <circle cx="8" cy="13" r="1.5"/>
                 </svg>
               </button>
-            </div>
-            <div class="header-right">
-              <button class="icon-btn agent-btn" id="agent-btn" title="Select Agent">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 0L10.5 5.5L16 8L10.5 10.5L8 16L5.5 10.5L0 8L5.5 5.5L8 0Z"/>
-                </svg>
-              </button>
+              <!-- Dropdown Menu -->
+              <div class="dropdown-menu" id="dropdown-menu">
+                <button class="dropdown-item" id="menu-settings">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 10a2 2 0 100-4 2 2 0 000 4z"/>
+                    <path fill-rule="evenodd" d="M6.5 1a.5.5 0 00-.5.5v1.307a5.5 5.5 0 00-1.307.46L3.5 2.574a.5.5 0 00-.707 0L1.574 3.793a.5.5 0 000 .707l.693.693a5.5 5.5 0 00-.46 1.307H.5a.5.5 0 00-.5.5v1.5a.5.5 0 00.5.5h1.307a5.5 5.5 0 00.46 1.307l-.693.693a.5.5 0 000 .707l1.219 1.219a.5.5 0 00.707 0l.693-.693a5.5 5.5 0 001.307.46V14.5a.5.5 0 00.5.5h1.5a.5.5 0 00.5-.5v-1.307a5.5 5.5 0 001.307-.46l.693.693a.5.5 0 00.707 0l1.219-1.219a.5.5 0 000-.707l-.693-.693a5.5 5.5 0 00.46-1.307H14.5a.5.5 0 00.5-.5v-1.5a.5.5 0 00-.5-.5h-1.307a5.5 5.5 0 00-.46-1.307l.693-.693a.5.5 0 000-.707L12.207 2.574a.5.5 0 00-.707 0l-.693.693a5.5 5.5 0 00-1.307-.46V1.5a.5.5 0 00-.5-.5h-1.5z"/>
+                  </svg>
+                  <span>Settings</span>
+                </button>
+                <button class="dropdown-item" id="menu-help">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                    <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+                  </svg>
+                  <span>Help</span>
+                </button>
+              </div>
               <button class="icon-btn plus-btn" id="plus-btn" title="New Thread">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
               </button>
+              <button class="icon-btn star-btn" id="star-btn" title="Star">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
+                  <path d="M8 2l1.5 4.5h4.5l-3.5 2.5 1.5 4.5L8 11l-3.5 2.5 1.5-4.5-3.5-2.5h4.5L8 2z" stroke-width="1.5" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Threads Sidebar Panel -->
+          <div class="threads-panel" id="threads-panel">
+            <div class="threads-header">
+              <button class="icon-btn back-btn" id="back-btn" title="Back">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M10 2L4 8l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </button>
+              <span class="threads-title">Threads</span>
+              <div class="threads-actions">
+                <button class="icon-btn refresh-btn" id="refresh-btn" title="Refresh">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 3V1L5 4l3 3V5a5 5 0 110 10 5 5 0 01-5-5h2a3 3 0 103-3z" stroke="currentColor" stroke-width="1" fill="none"/>
+                  </svg>
+                </button>
+                <button class="icon-btn add-thread-btn" id="add-thread-btn" title="New Thread">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="threads-tabs">
+              <button class="threads-tab active" id="local-tab">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                </svg>
+                <span>Local</span>
+              </button>
+              <button class="threads-tab" id="remote-tab">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 1a7 7 0 100 14A7 7 0 008 1z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                  <circle cx="8" cy="8" r="2" fill="currentColor"/>
+                </svg>
+                <span>Remote</span>
+              </button>
+              <button class="icon-btn search-btn" id="search-threads-btn" title="Search">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                  <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="threads-content" id="threads-content">
+              <!-- Thread groups will be dynamically added here -->
             </div>
           </div>
 
@@ -288,6 +360,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 <path d="M2 4L6 8L14 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
               </svg>
               <span>Tasks</span>
+              <span class="tab-counter" id="tasks-counter">0/2</span>
             </button>
             <button class="nav-tab" data-tab="edits" id="tab-edits">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -898,6 +971,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.openSettings();
         break;
 
+      case 'openHelp':
+        await this.openHelp();
+        break;
+
       case 'askQuestion':
         await this.openQuickAsk();
         break;
@@ -947,6 +1024,59 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (model) {
           this._changeModel({ model });
         }
+        break;
+
+      case 'switchThread':
+        // Switch to a different thread
+        if (data.payload?.threadId) {
+          await this._loadThread(data.payload.threadId);
+        }
+        break;
+
+      case 'renameThread':
+        // Rename thread
+        if (data.payload?.threadId) {
+          const newName = await vscode.window.showInputBox({
+            prompt: 'Enter new thread name',
+            placeHolder: 'Thread name'
+          });
+          if (newName) {
+            await this._renameThread(data.payload.threadId, newName);
+          }
+        }
+        break;
+
+      case 'pinThread':
+        // Pin/unpin thread
+        if (data.payload?.threadId) {
+          await this._togglePinThread(data.payload.threadId);
+        }
+        break;
+
+      case 'deleteThread':
+        // Delete thread
+        if (data.payload?.threadId) {
+          const confirm = await vscode.window.showWarningMessage(
+            'Are you sure you want to delete this thread?',
+            { modal: true },
+            'Delete'
+          );
+          if (confirm === 'Delete') {
+            await this._deleteThread(data.payload.threadId);
+          }
+        }
+        break;
+
+      case 'exportThread':
+        // Export thread conversation
+        if (data.payload?.threadId) {
+          await this._exportThread(data.payload.threadId);
+        }
+        break;
+
+      case 'importThread':
+        // Import thread conversation
+        await this._importThread();
         break;
 
       default:
@@ -1137,8 +1267,109 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       'anthropic/claude-3-5-sonnet',
       'anthropic/claude-3-5-haiku'
     ];
-    
+
     return visionModels.some(vm => model.toLowerCase().includes(vm.toLowerCase()));
+  }
+
+  /**
+   * Thread Management Methods
+   */
+
+  private async _loadThread(threadId: string): Promise<void> {
+    // Load thread from storage
+    const threadData = this._context.workspaceState.get<ChatState>(`thread-${threadId}`);
+    if (threadData) {
+      this._state = threadData;
+      this._saveState();
+      this._updateWebviewState();
+    }
+  }
+
+  private async _renameThread(threadId: string, newName: string): Promise<void> {
+    // Rename thread - update thread metadata
+    const threadData = this._context.workspaceState.get<ChatState>(`thread-${threadId}`);
+    if (threadData) {
+      // Store thread name in metadata
+      await this._context.workspaceState.update(`thread-${threadId}-name`, newName);
+      vscode.window.showInformationMessage(`Thread renamed to: ${newName}`);
+    }
+  }
+
+  private async _togglePinThread(threadId: string): Promise<void> {
+    // Toggle pin status
+    const isPinned = this._context.workspaceState.get<boolean>(`thread-${threadId}-pinned`, false);
+    await this._context.workspaceState.update(`thread-${threadId}-pinned`, !isPinned);
+    vscode.window.showInformationMessage(isPinned ? 'Thread unpinned' : 'Thread pinned');
+  }
+
+  private async _deleteThread(threadId: string): Promise<void> {
+    // Delete thread from storage
+    await this._context.workspaceState.update(`thread-${threadId}`, undefined);
+    await this._context.workspaceState.update(`thread-${threadId}-name`, undefined);
+    await this._context.workspaceState.update(`thread-${threadId}-pinned`, undefined);
+
+    // If deleting current thread, create new one
+    if (this._state.threadId === threadId) {
+      this._state.threadId = `thread-${Date.now()}`;
+      this._state.messages = [];
+      this._state.attachments = [];
+      this._saveState();
+      this._updateWebviewState();
+    }
+
+    vscode.window.showInformationMessage('Thread deleted');
+  }
+
+  private async _exportThread(threadId: string): Promise<void> {
+    // Export thread conversation to JSON file
+    const threadData = this._context.workspaceState.get<ChatState>(`thread-${threadId}`);
+    if (!threadData) {
+      vscode.window.showErrorMessage('Thread not found');
+      return;
+    }
+
+    const uri = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file(`thread-${threadId}.json`),
+      filters: { 'JSON': ['json'] }
+    });
+
+    if (uri) {
+      const fs = require('fs');
+      fs.writeFileSync(uri.fsPath, JSON.stringify(threadData, null, 2));
+      vscode.window.showInformationMessage('Thread exported successfully');
+    }
+  }
+
+  private async _importThread(): Promise<void> {
+    // Import thread conversation from JSON file
+    const uri = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      filters: { 'JSON': ['json'] }
+    });
+
+    if (uri && uri[0]) {
+      const fs = require('fs');
+      try {
+        const content = fs.readFileSync(uri[0].fsPath, 'utf8');
+        const threadData = JSON.parse(content) as ChatState;
+
+        // Generate new thread ID
+        const newThreadId = `thread-${Date.now()}`;
+        threadData.threadId = newThreadId;
+
+        // Save imported thread
+        await this._context.workspaceState.update(`thread-${newThreadId}`, threadData);
+
+        // Load the imported thread
+        this._state = threadData;
+        this._saveState();
+        this._updateWebviewState();
+
+        vscode.window.showInformationMessage('Thread imported successfully');
+      } catch (error) {
+        vscode.window.showErrorMessage('Failed to import thread: Invalid file format');
+      }
+    }
   }
 
   // Public methods for commands
@@ -1148,6 +1379,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   public async openSettings(): Promise<void> {
     await this._settingsPanel.show();
+  }
+
+  public async openHelp(): Promise<void> {
+    // Open help documentation or show help dialog
+    const helpUrl = 'https://github.com/yourusername/denix-ai#readme';
+    await vscode.env.openExternal(vscode.Uri.parse(helpUrl));
   }
 
   public async openQuickAsk(): Promise<void> {
