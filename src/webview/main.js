@@ -7,17 +7,20 @@
   // State
   let state = {
     threadId: '',
+    threadTitle: 'denix-ai',
     messages: [],
     attachments: [],
     selectedModel: 'anthropic/claude-3.5-sonnet',
     autoMode: true,
     activeTab: 'thread',
-    currentFile: undefined
+    currentFile: undefined,
+    isGenerating: false
   };
 
   // DOM Elements
   const elements = {
     hamburgerBtn: document.getElementById('hamburger-btn'),
+    projectTitle: document.getElementById('project-title'),
     menuBtn: document.getElementById('menu-btn'),
     dropdownMenu: document.getElementById('dropdown-menu'),
     menuSettings: document.getElementById('menu-settings'),
@@ -52,6 +55,7 @@
     attachBtn: document.getElementById('attach-btn'),
     settingsBtn: document.getElementById('settings-btn'),
     sendBtn: document.getElementById('send-btn'),
+    stopBtn: document.getElementById('stop-btn'),
     imageModal: document.getElementById('image-modal'),
     imageModalImg: document.getElementById('image-modal-img'),
     imageModalClose: document.getElementById('image-modal-close')
@@ -95,6 +99,18 @@
       console.log('Star clicked');
     });
 
+    // Double-click on title to rename
+    elements.projectTitle?.addEventListener('dblclick', () => {
+      enableTitleEditing();
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (elements.dropdownMenu && !elements.dropdownMenu.contains(e.target) && e.target !== elements.menuBtn) {
+        hideDropdownMenu();
+      }
+    });
+
     // Threads panel
     elements.backBtn?.addEventListener('click', () => {
       hideThreadsPanel();
@@ -119,13 +135,6 @@
 
     elements.searchThreadsBtn?.addEventListener('click', () => {
       console.log('Search threads');
-    });
-
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-      if (elements.dropdownMenu && !elements.dropdownMenu.contains(e.target) && e.target !== elements.menuBtn) {
-        hideDropdownMenu();
-      }
     });
 
     // Tab navigation
@@ -177,6 +186,10 @@
 
     elements.sendBtn?.addEventListener('click', () => {
       sendUserMessage();
+    });
+
+    elements.stopBtn?.addEventListener('click', () => {
+      stopGeneration();
     });
 
     // Message input handlers
@@ -242,6 +255,9 @@
         break;
       case 'aiResponse':
         addAIMessage(message.data);
+        // Reset generating state when response is complete
+        state.isGenerating = false;
+        updateGeneratingUI();
         break;
       case 'typingIndicator':
         showTypingIndicator(message.data.active);
@@ -251,6 +267,9 @@
         break;
       case 'error':
         showError(message.data.message);
+        // Reset generating state on error
+        state.isGenerating = false;
+        updateGeneratingUI();
         break;
       case 'enhancedPrompt':
         if (message.data) {
@@ -303,8 +322,35 @@
     messageDiv.className = `message message-${msg.role}`;
     messageDiv.setAttribute('data-id', msg.id);
 
+    // Message header with timestamp and edit button
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'message-header';
+
+    const timestamp = document.createElement('span');
+    timestamp.className = 'message-timestamp';
+    timestamp.textContent = formatTimestamp(msg.timestamp || new Date());
+    headerDiv.appendChild(timestamp);
+
+    // Add edit button for user messages
+    if (msg.role === 'user') {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'icon-btn message-edit-btn';
+      editBtn.title = 'Edit message';
+      editBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10z"/>
+        </svg>
+      `;
+      editBtn.addEventListener('click', () => editMessage(msg.id));
+      headerDiv.appendChild(editBtn);
+    }
+
+    messageDiv.appendChild(headerDiv);
+
+    // Message content
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
+    contentDiv.setAttribute('data-message-id', msg.id);
 
     if (msg.role === 'user') {
       contentDiv.textContent = msg.content;
@@ -314,7 +360,106 @@
     }
 
     messageDiv.appendChild(contentDiv);
+
+    // Add attachments if any
+    if (msg.attachments && msg.attachments.length > 0) {
+      const attachmentsDiv = document.createElement('div');
+      attachmentsDiv.className = 'message-attachments';
+      msg.attachments.forEach(att => {
+        const attEl = document.createElement('div');
+        attEl.className = 'message-attachment';
+        attEl.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.5L9.5 0zm0 1v2A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5z"/>
+          </svg>
+          <span>${att.name}</span>
+        `;
+        attachmentsDiv.appendChild(attEl);
+      });
+      messageDiv.appendChild(attachmentsDiv);
+    }
+
     return messageDiv;
+  }
+
+  // Format timestamp
+  function formatTimestamp(date) {
+    if (!(date instanceof Date)) {
+      date = new Date(date);
+    }
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    const displayMinutes = minutes.toString().padStart(2, '0');
+    return `${displayHours}:${displayMinutes} ${ampm}`;
+  }
+
+  // Edit message
+  function editMessage(messageId) {
+    const message = state.messages.find(m => m.id === messageId);
+    if (!message || message.role !== 'user') return;
+
+    const contentEl = document.querySelector(`.message-content[data-message-id="${messageId}"]`);
+    if (!contentEl) return;
+
+    const originalContent = message.content;
+
+    // Make content editable
+    contentEl.contentEditable = true;
+    contentEl.classList.add('message-content-editable');
+    contentEl.focus();
+
+    // Select all text
+    const range = document.createRange();
+    range.selectNodeContents(contentEl);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    // Create edit actions
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'message-edit-actions';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'message-edit-save';
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', () => {
+      const newContent = contentEl.textContent.trim();
+      if (newContent && newContent !== originalContent) {
+        message.content = newContent;
+        sendMessage({ type: 'editMessage', data: { messageId, content: newContent } });
+      }
+      contentEl.contentEditable = false;
+      contentEl.classList.remove('message-content-editable');
+      actionsDiv.remove();
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'message-edit-cancel';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => {
+      contentEl.textContent = originalContent;
+      contentEl.contentEditable = false;
+      contentEl.classList.remove('message-content-editable');
+      actionsDiv.remove();
+    });
+
+    actionsDiv.appendChild(cancelBtn);
+    actionsDiv.appendChild(saveBtn);
+    contentEl.parentElement.appendChild(actionsDiv);
+
+    // Handle Enter key
+    contentEl.addEventListener('keydown', function handleEnter(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        saveBtn.click();
+        contentEl.removeEventListener('keydown', handleEnter);
+      } else if (e.key === 'Escape') {
+        cancelBtn.click();
+        contentEl.removeEventListener('keydown', handleEnter);
+      }
+    });
   }
 
   // Simple markdown renderer
@@ -539,6 +684,10 @@
       return;
     }
 
+    // Set generating state
+    state.isGenerating = true;
+    updateGeneratingUI();
+
     sendMessage({
       type: 'userMessage',
       data: {
@@ -551,6 +700,26 @@
     input.value = '';
     input.style.height = 'auto';
     updateSendButtonState();
+  }
+
+  // Stop generation
+  function stopGeneration() {
+    state.isGenerating = false;
+    updateGeneratingUI();
+    sendMessage({ type: 'command', data: { command: 'stopGeneration' } });
+  }
+
+  // Update UI based on generating state
+  function updateGeneratingUI() {
+    if (elements.stopBtn && elements.sendBtn) {
+      if (state.isGenerating) {
+        elements.stopBtn.classList.remove('hidden');
+        elements.sendBtn.style.display = 'none';
+      } else {
+        elements.stopBtn.classList.add('hidden');
+        elements.sendBtn.style.display = 'flex';
+      }
+    }
   }
 
   // Clear all attachments
@@ -603,6 +772,63 @@
     if (elements.imageModal) {
       elements.imageModal.style.display = 'none';
     }
+  }
+
+  // Title editing functions
+  function enableTitleEditing() {
+    if (!elements.projectTitle) return;
+
+    const currentTitle = elements.projectTitle.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'project-title-edit';
+    input.value = currentTitle;
+
+    // Replace span with input
+    elements.projectTitle.style.display = 'none';
+    elements.projectTitle.parentElement.insertBefore(input, elements.projectTitle);
+
+    input.focus();
+    input.select();
+
+    // Save on Enter, cancel on Escape
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        saveTitleEdit(input, currentTitle);
+      } else if (e.key === 'Escape') {
+        cancelTitleEdit(input);
+      }
+    });
+
+    // Save on blur
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        saveTitleEdit(input, currentTitle);
+      }, 100);
+    });
+  }
+
+  function saveTitleEdit(input, originalTitle) {
+    if (!input || !elements.projectTitle) return;
+
+    const newTitle = input.value.trim();
+    if (newTitle && newTitle !== originalTitle) {
+      elements.projectTitle.textContent = newTitle;
+      state.threadTitle = newTitle;
+      sendMessage({ type: 'command', data: { command: 'renameThread', payload: { title: newTitle } } });
+    }
+
+    // Remove input and show span
+    input.remove();
+    elements.projectTitle.style.display = '';
+  }
+
+  function cancelTitleEdit(input) {
+    if (!input || !elements.projectTitle) return;
+
+    // Remove input and show span
+    input.remove();
+    elements.projectTitle.style.display = '';
   }
 
   // Toggle dropdown menu

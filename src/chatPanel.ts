@@ -252,48 +252,49 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           <!-- Header -->
           <div class="header">
             <div class="header-left">
-              <button class="icon-btn hamburger-btn" id="hamburger-btn" title="Threads">
+              <button class="icon-btn" id="hamburger-btn" aria-label="Menu" title="Menu">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <path d="M2 3h12v1H2V3zm0 4h12v1H2V7zm0 4h12v1H2v-1z"/>
                 </svg>
               </button>
-              <span class="project-title">Project summary: Denix AI</span>
+            </div>
+            <div class="header-center">
+              <span class="project-title" id="project-title">Project summary: Denix AI</span>
             </div>
             <div class="header-right">
-              <button class="icon-btn menu-btn" id="menu-btn" title="More options">
+              <button class="icon-btn" id="plus-btn" aria-label="New thread" title="New thread">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2z"/>
+                </svg>
+              </button>
+              <button class="icon-btn" id="star-btn" aria-label="Star" title="Star">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M3.612 15.443c-.386.198-.824-.149-.746-.592l.83-4.73L.173 6.765c-.329-.314-.158-.888.283-.95l4.898-.696L7.538.792c.197-.39.73-.39.927 0l2.184 4.327 4.898.696c.441.062.612.636.282.95l-3.522 3.356.83 4.73c.078.443-.36.79-.746.592L8 13.187l-4.389 2.256z"/>
+                </svg>
+              </button>
+              <button class="icon-btn" id="menu-btn" aria-label="More options" title="More options">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <circle cx="8" cy="3" r="1.5"/>
                   <circle cx="8" cy="8" r="1.5"/>
                   <circle cx="8" cy="13" r="1.5"/>
                 </svg>
               </button>
-              <!-- Dropdown Menu -->
               <div class="dropdown-menu" id="dropdown-menu">
-                <button class="dropdown-item" id="menu-settings">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M8 10a2 2 0 100-4 2 2 0 000 4z"/>
-                    <path fill-rule="evenodd" d="M6.5 1a.5.5 0 00-.5.5v1.307a5.5 5.5 0 00-1.307.46L3.5 2.574a.5.5 0 00-.707 0L1.574 3.793a.5.5 0 000 .707l.693.693a5.5 5.5 0 00-.46 1.307H.5a.5.5 0 00-.5.5v1.5a.5.5 0 00.5.5h1.307a5.5 5.5 0 00.46 1.307l-.693.693a.5.5 0 000 .707l1.219 1.219a.5.5 0 00.707 0l.693-.693a5.5 5.5 0 001.307.46V14.5a.5.5 0 00.5.5h1.5a.5.5 0 00.5-.5v-1.307a5.5 5.5 0 001.307-.46l.693.693a.5.5 0 00.707 0l1.219-1.219a.5.5 0 000-.707l-.693-.693a5.5 5.5 0 00.46-1.307H14.5a.5.5 0 00.5-.5v-1.5a.5.5 0 00-.5-.5h-1.307a5.5 5.5 0 00-.46-1.307l.693-.693a.5.5 0 000-.707L12.207 2.574a.5.5 0 00-.707 0l-.693.693a5.5 5.5 0 00-1.307-.46V1.5a.5.5 0 00-.5-.5h-1.5z"/>
+                <div class="dropdown-item" id="menu-settings">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+                    <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/>
                   </svg>
                   <span>Settings</span>
-                </button>
-                <button class="dropdown-item" id="menu-help">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                </div>
+                <div class="dropdown-item" id="menu-help">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
                     <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
                   </svg>
                   <span>Help</span>
-                </button>
+                </div>
               </div>
-              <button class="icon-btn plus-btn" id="plus-btn" title="New Thread">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-              </button>
-              <button class="icon-btn star-btn" id="star-btn" title="Star">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
-                  <path d="M8 2l1.5 4.5h4.5l-3.5 2.5 1.5 4.5L8 11l-3.5 2.5 1.5-4.5-3.5-2.5h4.5L8 2z" stroke-width="1.5" stroke-linejoin="round"/>
-                </svg>
-              </button>
             </div>
           </div>
 
@@ -462,6 +463,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <circle cx="8" cy="8" r="2" fill="currentColor"/>
                     <path d="M8 1V3M8 13V15M15 8H13M3 8H1M12.364 3.636L10.95 5.05M5.05 10.95L3.636 12.364M12.364 12.364L10.95 10.95M5.05 5.05L3.636 3.636" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="stop-btn hidden" id="stop-btn" aria-label="Stop generation" title="Stop generation">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                    <rect x="4" y="4" width="8" height="8" fill="currentColor"/>
                   </svg>
                 </button>
                 <button class="send-btn" id="send-btn" aria-label="Send message" title="Send message" disabled>
