@@ -100,14 +100,20 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Menu button wrapper for dropdown positioning */
+.menu-wrapper {
   position: relative;
+  display: flex;
+  align-items: center;
 }
 
 /* Dropdown Menu */
 .dropdown-menu {
   position: absolute;
-  top: 32px;
-  left: 0;
+  top: calc(100% + 4px);
+  right: 0;
   background: var(--background-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
@@ -293,46 +299,62 @@ body {
   gap: 4px;
 }
 
-.threads-tabs {
-  display: flex;
-  align-items: center;
+.threads-search {
   padding: 8px 12px;
   background: var(--background-primary);
   border-bottom: 1px solid var(--border-color);
-  gap: 8px;
 }
 
-.threads-tab {
+.search-input-container {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-size: 13px;
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
+  padding: 6px 10px;
+  transition: border-color 0.15s ease;
 }
 
-.threads-tab:hover {
-  background: var(--hover-bg);
-  color: var(--text-primary);
+.search-input-container:focus-within {
+  border-color: var(--accent-color);
 }
 
-.threads-tab.active {
-  background: var(--hover-bg);
-  color: var(--text-primary);
-}
-
-.threads-tab svg {
+.search-icon {
   width: 14px;
   height: 14px;
+  color: var(--text-secondary);
+  margin-right: 8px;
+  flex-shrink: 0;
 }
 
-.search-btn {
-  margin-left: auto;
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 0;
+}
+
+.search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.clear-search-btn {
+  padding: 2px;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.clear-search-btn:hover {
+  opacity: 1;
+}
+
+.clear-search-btn.hidden {
+  display: none;
 }
 
 .threads-content {

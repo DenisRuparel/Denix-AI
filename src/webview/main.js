@@ -26,7 +26,6 @@
     menuSettings: document.getElementById('menu-settings'),
     menuHelp: document.getElementById('menu-help'),
     plusBtn: document.getElementById('plus-btn'),
-    starBtn: document.getElementById('star-btn'),
     tabThread: document.getElementById('tab-thread'),
     tabTasks: document.getElementById('tab-tasks'),
     tabEdits: document.getElementById('tab-edits'),
@@ -35,9 +34,8 @@
     backBtn: document.getElementById('back-btn'),
     refreshBtn: document.getElementById('refresh-btn'),
     addThreadBtn: document.getElementById('add-thread-btn'),
-    localTab: document.getElementById('local-tab'),
-    remoteTab: document.getElementById('remote-tab'),
-    searchThreadsBtn: document.getElementById('search-threads-btn'),
+    searchThreadsInput: document.getElementById('search-threads-input'),
+    clearSearchBtn: document.getElementById('clear-search-btn'),
     threadsContent: document.getElementById('threads-content'),
     content: document.getElementById('content'),
     welcomeCard: document.getElementById('welcome-card'),
@@ -95,10 +93,6 @@
       sendMessage({ type: 'command', data: { command: 'newThread' } });
     });
 
-    elements.starBtn?.addEventListener('click', () => {
-      console.log('Star clicked');
-    });
-
     // Double-click on title to rename
     elements.projectTitle?.addEventListener('dblclick', () => {
       enableTitleEditing();
@@ -125,16 +119,16 @@
       hideThreadsPanel();
     });
 
-    elements.localTab?.addEventListener('click', () => {
-      switchThreadsTab('local');
+    // Thread search
+    elements.searchThreadsInput?.addEventListener('input', (e) => {
+      handleThreadSearch(e.target.value);
     });
 
-    elements.remoteTab?.addEventListener('click', () => {
-      switchThreadsTab('remote');
-    });
-
-    elements.searchThreadsBtn?.addEventListener('click', () => {
-      console.log('Search threads');
+    elements.clearSearchBtn?.addEventListener('click', () => {
+      if (elements.searchThreadsInput) {
+        elements.searchThreadsInput.value = '';
+        handleThreadSearch('');
+      }
     });
 
     // Tab navigation
@@ -862,16 +856,56 @@
     }
   }
 
-  // Switch threads tab
-  function switchThreadsTab(tab) {
-    if (tab === 'local') {
-      elements.localTab?.classList.add('active');
-      elements.remoteTab?.classList.remove('active');
-    } else {
-      elements.localTab?.classList.remove('active');
-      elements.remoteTab?.classList.add('active');
+  // Handle thread search
+  function handleThreadSearch(query) {
+    const searchQuery = query.trim().toLowerCase();
+
+    // Show/hide clear button
+    if (elements.clearSearchBtn) {
+      if (searchQuery) {
+        elements.clearSearchBtn.classList.remove('hidden');
+      } else {
+        elements.clearSearchBtn.classList.add('hidden');
+      }
     }
-    loadThreadHistory();
+
+    // Filter threads
+    if (!elements.threadsContent) return;
+
+    const threadItems = elements.threadsContent.querySelectorAll('.thread-item');
+    const threadGroups = elements.threadsContent.querySelectorAll('.thread-group');
+
+    if (!searchQuery) {
+      // Show all threads and groups
+      threadItems.forEach(item => item.style.display = '');
+      threadGroups.forEach(group => group.style.display = '');
+      return;
+    }
+
+    // Hide all groups initially
+    threadGroups.forEach(group => {
+      const visibleThreads = [];
+      const threads = group.querySelectorAll('.thread-item');
+
+      threads.forEach(item => {
+        const title = item.querySelector('.thread-title')?.textContent.toLowerCase() || '';
+        const preview = item.querySelector('.thread-preview')?.textContent.toLowerCase() || '';
+
+        if (title.includes(searchQuery) || preview.includes(searchQuery)) {
+          item.style.display = '';
+          visibleThreads.push(item);
+        } else {
+          item.style.display = 'none';
+        }
+      });
+
+      // Show group only if it has visible threads
+      if (visibleThreads.length > 0) {
+        group.style.display = '';
+      } else {
+        group.style.display = 'none';
+      }
+    });
   }
 
   // Load thread history
