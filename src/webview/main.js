@@ -43,6 +43,9 @@
     contextPills: document.getElementById('context-pills'),
     messageInput: document.getElementById('message-input'),
     mentionBtn: document.getElementById('mention-btn'),
+    mentionPicker: document.getElementById('mention-picker'),
+    mentionSearchInput: document.getElementById('mention-search-input'),
+    mentionList: document.getElementById('mention-list'),
     memoriesBtn: document.getElementById('memories-btn'),
     rulesBtn: document.getElementById('rules-btn'),
     selectionBtn: document.getElementById('selection-btn'),
@@ -58,6 +61,10 @@
     imageModalImg: document.getElementById('image-modal-img'),
     imageModalClose: document.getElementById('image-modal-close')
   };
+
+  // Mention picker state
+  let mentionItems = [];
+  let selectedMentionIndex = -1;
 
   // Initialize
   function init() {
@@ -137,8 +144,25 @@
     elements.tabEdits?.addEventListener('click', () => switchTab('edits'));
 
     // Top row quick actions
-    elements.mentionBtn?.addEventListener('click', () => {
-      showMentionPicker();
+    elements.mentionBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMentionPicker();
+    });
+
+    // Mention picker search
+    elements.mentionSearchInput?.addEventListener('input', (e) => {
+      handleMentionSearch(e.target.value);
+    });
+
+    elements.mentionSearchInput?.addEventListener('keydown', (e) => {
+      handleMentionKeydown(e);
+    });
+
+    // Close mention picker when clicking outside
+    document.addEventListener('click', (e) => {
+      if (elements.mentionPicker && !elements.mentionPicker.contains(e.target) && e.target !== elements.mentionBtn) {
+        hideMentionPicker();
+      }
     });
 
     elements.memoriesBtn?.addEventListener('click', () => {
@@ -1135,10 +1159,210 @@
     console.log('Show agent selector');
   }
 
-  // Show mention picker
+  // Mention Picker Functions
+  function toggleMentionPicker() {
+    if (elements.mentionPicker?.classList.contains('show')) {
+      hideMentionPicker();
+    } else {
+      showMentionPicker();
+    }
+  }
+
   function showMentionPicker() {
-    // Placeholder - would show file/symbol picker
-    console.log('Show mention picker');
+    if (!elements.mentionPicker || !elements.mentionBtn) return;
+    
+    elements.mentionPicker.classList.add('show');
+    elements.mentionBtn.classList.add('active');
+    
+    // Focus search input
+    setTimeout(() => {
+      elements.mentionSearchInput?.focus();
+    }, 10);
+    
+    // Load mention items
+    loadMentionItems('');
+  }
+
+  function hideMentionPicker() {
+    if (!elements.mentionPicker || !elements.mentionBtn) return;
+    
+    elements.mentionPicker.classList.remove('show');
+    elements.mentionBtn.classList.remove('active');
+    selectedMentionIndex = -1;
+    
+    if (elements.mentionSearchInput) {
+      elements.mentionSearchInput.value = '';
+    }
+  }
+
+  function loadMentionItems(query = '') {
+    sendMessage({
+      type: 'getMentionItems',
+      data: { query }
+    });
+  }
+
+  function handleMentionSearch(query) {
+    loadMentionItems(query);
+  }
+
+  function handleMentionKeydown(e) {
+    if (!elements.mentionList) return;
+
+    const items = elements.mentionList.querySelectorAll('.mention-item');
+    if (items.length === 0) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        selectedMentionIndex = Math.min(selectedMentionIndex + 1, items.length - 1);
+        updateMentionSelection(items);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        selectedMentionIndex = Math.max(selectedMentionIndex - 1, -1);
+        updateMentionSelection(items);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedMentionIndex >= 0 && items[selectedMentionIndex]) {
+          selectMentionItem(mentionItems[selectedMentionIndex]);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        hideMentionPicker();
+        break;
+    }
+  }
+
+  function updateMentionSelection(items) {
+    items.forEach((item, index) => {
+      if (index === selectedMentionIndex) {
+        item.classList.add('selected');
+        item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        item.classList.remove('selected');
+      }
+    });
+  }
+
+  function selectMentionItem(item) {
+    if (!item || !elements.messageInput) return;
+
+    // Insert mention into textarea
+    const mentionText = item.path ? `@${item.path}` : `@${item.label}`;
+    const textarea = elements.messageInput;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const newText = text.substring(0, start) + mentionText + ' ' + text.substring(end);
+    
+    textarea.value = newText;
+    textarea.focus();
+    textarea.setSelectionRange(start + mentionText.length + 1, start + mentionText.length + 1);
+    
+    // Auto-resize
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+    
+    // Update send button state
+    updateSendButtonState();
+    
+    // Hide picker
+    hideMentionPicker();
+  }
+
+  function renderMentionItems(items) {
+    if (!elements.mentionList) return;
+
+    mentionItems = items;
+    selectedMentionIndex = -1;
+
+    if (items.length === 0) {
+      elements.mentionList.innerHTML = '<div class="mention-empty">No items found</div>';
+      return;
+    }
+
+    // Group items by category
+    const grouped = {};
+    items.forEach(item => {
+      if (!grouped[item.category]) {
+        grouped[item.category] = [];
+      }
+      grouped[item.category].push(item);
+    });
+
+    let html = '';
+    const categories = Object.keys(grouped).sort();
+
+    categories.forEach(category => {
+      html += `<div class="mention-category">${category}</div>`;
+      grouped[category].forEach(item => {
+        const icon = getMentionIcon(item.icon, item.type);
+        const path = item.path ? `<div class="mention-item-path">${item.path}</div>` : '';
+        const hasSubmenu = item.hasSubmenu ? 'has-submenu' : '';
+        const arrow = item.hasSubmenu ? `
+          <svg class="mention-item-arrow" width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+            <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+        ` : '';
+        html += `
+          <button class="mention-item ${hasSubmenu}" data-type="${item.type}" data-label="${escapeHtml(item.label)}" data-path="${item.path ? escapeHtml(item.path) : ''}" data-has-submenu="${item.hasSubmenu || false}">
+            <div class="mention-item-icon">${icon}</div>
+            <div class="mention-item-content">
+              <div class="mention-item-label">${escapeHtml(item.label)}</div>
+              ${path}
+            </div>
+            ${arrow}
+          </button>
+        `;
+      });
+    });
+
+    elements.mentionList.innerHTML = html;
+
+    // Add click listeners
+    elements.mentionList.querySelectorAll('.mention-item').forEach((item, index) => {
+      item.addEventListener('click', () => {
+        const itemData = items.find(i => 
+          i.label === item.dataset.label && 
+          (i.path || '') === (item.dataset.path || '')
+        );
+        if (itemData) {
+          selectMentionItem(itemData);
+        }
+      });
+    });
+  }
+
+  function getMentionIcon(iconType, itemType) {
+    const icons = {
+      // File icon (document)
+      file: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4V2zm1 1v10h6V3H5z"/></svg>',
+      // Code file icon (blue, for TypeScript/JS files)
+      code: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1f6feb" stroke-width="1.5"><path d="M4 2h8v12H4V2zm1 1v10h6V3H5z"/><path d="M6 6l2 2-2 2M10 6l-2 2 2 2" stroke="#1f6feb" stroke-width="1.5" stroke-linecap="round"/></svg>',
+      // Folder icon
+      folder: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#d4a574" stroke-width="1.5"><path d="M2 3h5l1 2h6v9H2V3zm1 1v8h10V6H7L6 4H3z"/></svg>',
+      // Commit message icon
+      commit: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4V2zm1 1v10h6V3H5z"/><path d="M6 5h4M6 8h4M6 11h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+      // Docs icon (document stack)
+      docs: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v10H4V2zm1 1v8h6V3H5z"/><path d="M5 4h6v8H5V4z" opacity="0.5"/></svg>',
+      doc: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4V2zm1 1v10h6V3H5z"/></svg>',
+      // Terminal icon
+      terminal: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M5 7l2 2-2 2M10 9h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+      // Branch icon (git)
+      branch: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6c0 1.1.9 2 2 2h2v2c0 1.1.9 2 2 2h2c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2H9c-1.1 0-2 .9-2 2v2H5c-1.1 0-2-.9-2-2V6z"/><circle cx="5" cy="6" r="1.5"/><circle cx="11" cy="6" r="1.5"/><circle cx="11" cy="12" r="1.5"/></svg>',
+      // Browser icon (globe)
+      browser: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a10 10 0 0 1 2.5 6 10 10 0 0 1-2.5 6 10 10 0 0 1-2.5-6 10 10 0 0 1 2.5-6z"/></svg>'
+    };
+    return icons[iconType] || icons[itemType] || icons.file;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
 
@@ -1216,6 +1440,36 @@
   function sendMessage(message) {
     vscode.postMessage(message);
   }
+
+  // Handle messages from extension
+  window.addEventListener('message', event => {
+    const message = event.data;
+    switch (message.type) {
+      case 'mentionItems':
+        renderMentionItems(message.data || []);
+        break;
+      case 'updateState':
+        if (message.data) {
+          Object.assign(state, message.data);
+          updateUI();
+        }
+        break;
+      case 'enhancedPrompt':
+        if (elements.messageInput && message.data) {
+          elements.messageInput.value = message.data;
+          elements.messageInput.style.height = 'auto';
+          elements.messageInput.style.height = elements.messageInput.scrollHeight + 'px';
+          updateSendButtonState();
+        }
+        break;
+      case 'currentPrompt':
+        // This is handled by webview sending current prompt
+        break;
+      default:
+        // Handle other message types
+        break;
+    }
+  });
 
   // Initialize on load
   init();

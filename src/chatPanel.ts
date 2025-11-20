@@ -46,7 +46,8 @@ export interface WebviewMessage {
   type: 'userMessage' | 'aiResponse' | 'command' | 'fileAttach' | 'imageAttach' | 
         'modelChange' | 'activeFileChange' | 'removeAttachment' | 'previewImage' |
         'initialize' | 'updateState' | 'error' | 'typingIndicator' | 
-        'getCurrentPrompt' | 'currentPrompt' | 'dismissContext' | 'enhancedPrompt';
+        'getCurrentPrompt' | 'currentPrompt' | 'dismissContext' | 'enhancedPrompt' |
+        'getMentionItems' | 'mentionItems' | 'insertMention';
   data?: any;
   payload?: any;
 }
@@ -386,11 +387,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             <!-- Top Row: Context Pills & Quick Actions -->
             <div class="pills-row">
               <div class="quick-actions">
-                <button class="icon-btn" id="mention-btn" aria-label="Mention" title="Mention">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C12.42 16 16 12.42 16 8C16 3.58 12.42 0 8 0ZM8 14C4.69 14 2 11.31 2 8C2 4.69 4.69 2 8 2C11.31 2 14 4.69 14 8C14 11.31 11.31 14 8 14Z"/>
-                  </svg>
-                </button>
+                <div class="mention-wrapper">
+                  <button class="icon-btn mention-btn" id="mention-btn" aria-label="Mention" title="Mention">
+                    <svg class="mention-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M8 2C5.24 2 3 4.24 3 7c0 1.5.7 2.83 1.8 3.7L3 14l3.3-1.8C7.17 13.3 8.5 14 10 14c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5"/>
+                      <path d="M8 5v4l3 2" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                  <div class="mention-picker" id="mention-picker">
+                    <div class="mention-search-container">
+                      <svg class="mention-search-icon" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                      </svg>
+                      <input type="text" class="mention-search-input" id="mention-search-input" placeholder="Add files, folders, docs..." autocomplete="off" />
+                    </div>
+                    <div class="mention-list" id="mention-list"></div>
+                  </div>
+                </div>
                 <button class="icon-btn" id="memories-btn" aria-label="Memories" title="Memories">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
@@ -539,6 +552,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case 'dismissContext':
         this._dismissedContextIds.add(message.data.id);
         await this._updateContextAttachments();
+        break;
+
+      case 'getMentionItems':
+        const mentionItems = await this._getMentionItems(message.data?.query || '');
+        this._sendMessageToWebview({
+          type: 'mentionItems',
+          data: mentionItems
+        });
+        break;
+
+      case 'insertMention':
+        // Handle mention insertion - this will be handled by webview
         break;
 
       default:
@@ -1531,6 +1556,248 @@ Make it:
     this._state.autoMode = !this._state.autoMode;
     this._saveState();
     this._updateWebviewState();
+  }
+
+  /**
+   * Get mention items (files, folders, docs, terminals, branches)
+   */
+  private async _getMentionItems(query: string = ''): Promise<Array<{ type: string; label: string; path?: string; icon?: string; category: string; extension?: string; hasSubmenu?: boolean }>> {
+    const items: Array<{ type: string; label: string; path?: string; icon?: string; category: string; extension?: string; hasSubmenu?: boolean }> = [];
+    const lowerQuery = query.toLowerCase();
+
+    try {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      if (!workspaceFolder) {
+        return items;
+      }
+
+      // Get COMMIT_EDITMSG (git commit message file)
+      if (!query || 'commit'.includes(lowerQuery) || 'editmsg'.includes(lowerQuery)) {
+        const gitDir = vscode.Uri.joinPath(workspaceFolder.uri, '.git');
+        try {
+          const commitEditMsg = vscode.Uri.joinPath(gitDir, 'COMMIT_EDITMSG');
+          const stat = await vscode.workspace.fs.stat(commitEditMsg);
+          if (stat.type === vscode.FileType.File) {
+            items.push({
+              type: 'file',
+              label: 'COMMIT_EDITMSG',
+              path: '.git/COMMIT_EDITMSG',
+              icon: 'commit',
+              category: 'Files & Folders',
+              extension: ''
+            });
+          }
+        } catch {
+          // COMMIT_EDITMSG doesn't exist, skip
+        }
+      }
+
+      // Get files and folders
+      const filesAndFolders = await this._getFilesAndFolders(workspaceFolder.uri, lowerQuery);
+      items.push(...filesAndFolders);
+
+      // Get docs category (with submenu)
+      if (!query || 'docs'.includes(lowerQuery) || 'doc'.includes(lowerQuery)) {
+        items.push({
+          type: 'docs',
+          label: 'Docs',
+          icon: 'docs',
+          category: 'Docs',
+          hasSubmenu: true
+        });
+      }
+
+      // Get actual doc files (for submenu)
+      const docs = await this._getDocs(workspaceFolder.uri, lowerQuery);
+      items.push(...docs);
+
+      // Get terminals (with submenu)
+      if (!query || 'terminal'.includes(lowerQuery) || 'terminals'.includes(lowerQuery)) {
+        items.push({
+          type: 'terminal',
+          label: 'Terminals',
+          icon: 'terminal',
+          category: 'Terminals',
+          hasSubmenu: true
+        });
+      }
+
+      // Get branches
+      const branches = await this._getBranches(lowerQuery);
+      items.push(...branches);
+
+      // Get browser/workspace folders
+      const folders = this._getWorkspaceFolders(lowerQuery);
+      items.push(...folders);
+
+    } catch (error) {
+      console.error('Error fetching mention items:', error);
+    }
+
+    return items;
+  }
+
+  /**
+   * Get files and folders from workspace
+   */
+  private async _getFilesAndFolders(rootUri: vscode.Uri, query: string): Promise<Array<{ type: string; label: string; path: string; icon: string; category: string; extension?: string; hasSubmenu?: boolean }>> {
+    const items: Array<{ type: string; label: string; path: string; icon: string; category: string; extension?: string; hasSubmenu?: boolean }> = [];
+    const maxItems = 20;
+
+    try {
+      const entries = await vscode.workspace.fs.readDirectory(rootUri);
+      for (const [name, fileType] of entries.slice(0, maxItems)) {
+        // Skip hidden files and common ignore patterns
+        if (name.startsWith('.') && name !== '.denix') {
+          continue;
+        }
+
+        const matches = !query || name.toLowerCase().includes(query);
+        if (!matches) {
+          continue;
+        }
+
+        const uri = vscode.Uri.joinPath(rootUri, name);
+        const relativePath = vscode.workspace.asRelativePath(uri, false);
+
+        if (fileType === vscode.FileType.File) {
+          const ext = path.extname(name).slice(1).toLowerCase();
+          const iconType = ext === 'ts' || ext === 'tsx' || ext === 'js' || ext === 'jsx' ? 'code' : 'file';
+          items.push({
+            type: 'file',
+            label: name,
+            path: relativePath,
+            icon: iconType,
+            category: 'Files & Folders',
+            extension: ext
+          });
+        } else if (fileType === vscode.FileType.Directory) {
+          items.push({
+            type: 'folder',
+            label: name,
+            path: relativePath,
+            icon: 'folder',
+            category: 'Files & Folders',
+            hasSubmenu: true
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error reading files and folders:', error);
+    }
+
+    return items;
+  }
+
+  /**
+   * Get documentation files (markdown)
+   */
+  private async _getDocs(rootUri: vscode.Uri, query: string): Promise<Array<{ type: string; label: string; path: string; icon: string; category: string }>> {
+    const items: Array<{ type: string; label: string; path: string; icon: string; category: string }> = [];
+    const maxItems = 10;
+
+    try {
+      const pattern = new vscode.RelativePattern(rootUri, '**/*.md');
+      const files = await vscode.workspace.findFiles(pattern, '**/node_modules/**', maxItems);
+
+      for (const file of files) {
+        const name = path.basename(file.fsPath);
+        const relativePath = vscode.workspace.asRelativePath(file, false);
+
+        if (!query || name.toLowerCase().includes(query) || relativePath.toLowerCase().includes(query)) {
+          items.push({
+            type: 'doc',
+            label: name,
+            path: relativePath,
+            icon: 'doc',
+            category: 'Docs'
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error reading docs:', error);
+    }
+
+    return items;
+  }
+
+  /**
+   * Get terminals
+   */
+  private _getTerminals(query: string): Array<{ type: string; label: string; icon: string; category: string }> {
+    const items: Array<{ type: string; label: string; icon: string; category: string }> = [];
+
+    if (!query || 'terminal'.includes(query) || 'terminals'.includes(query)) {
+      items.push({
+        type: 'terminal',
+        label: 'Terminals',
+        icon: 'terminal',
+        category: 'Terminals'
+      });
+    }
+
+    return items;
+  }
+
+  /**
+   * Get Git branches
+   */
+  private async _getBranches(query: string): Promise<Array<{ type: string; label: string; icon: string; category: string }>> {
+    const items: Array<{ type: string; label: string; icon: string; category: string }> = [];
+
+    try {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      if (!workspaceFolder) {
+        return items;
+      }
+
+      // Try to get current branch using git command
+      const gitExtension = vscode.extensions.getExtension('vscode.git');
+      if (gitExtension && gitExtension.isActive) {
+        const git = gitExtension.exports.getAPI(1);
+        const repository = git.getRepository(workspaceFolder.uri);
+        
+        if (repository) {
+          const currentBranch = repository.state.HEAD?.name;
+          if (currentBranch) {
+            if (!query || currentBranch.toLowerCase().includes(query) || 'branch'.includes(query)) {
+              items.push({
+                type: 'branch',
+                label: `Branch (Diff with ${currentBranch})`,
+                icon: 'branch',
+                category: 'Branch (Diff with Main)'
+              });
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // Git extension not available or error
+      console.error('Error getting branches:', error);
+    }
+
+    return items;
+  }
+
+  /**
+   * Get workspace folders
+   */
+  private _getWorkspaceFolders(query: string): Array<{ type: string; label: string; icon: string; category: string }> {
+    const items: Array<{ type: string; label: string; icon: string; category: string }> = [];
+    const folders = vscode.workspace.workspaceFolders || [];
+
+    if (!query || 'browser'.includes(query) || 'workspace'.includes(query)) {
+      for (const folder of folders) {
+        items.push({
+          type: 'workspace',
+          label: folder.name,
+          icon: 'browser',
+          category: 'Browser'
+        });
+      }
+    }
+
+    return items;
   }
 
   public async selectModel(): Promise<void> {
