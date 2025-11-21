@@ -47,7 +47,8 @@ export interface WebviewMessage {
         'modelChange' | 'activeFileChange' | 'removeAttachment' | 'previewImage' |
         'initialize' | 'updateState' | 'error' | 'typingIndicator' | 
         'getCurrentPrompt' | 'currentPrompt' | 'dismissContext' | 'enhancedPrompt' |
-        'getMentionItems' | 'mentionItems' | 'insertMention';
+        'getMentionItems' | 'mentionItems' | 'insertMention' | 'memoriesContent' |
+        'guidelinesContent' | 'rulesList';
   data?: any;
   payload?: any;
 }
@@ -111,6 +112,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _dismissedContextIds = new Set<string>();
   private _settingsPanel: SettingsPanel;
   private _lastKeywords: string[] = [];
+  private readonly _workspaceRoot: string | undefined;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -128,6 +130,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this._selectionWatcher = selectionWatcher;
     this._contextManager = contextManager;
     this._quickQuestionService = quickQuestionService;
+    this._workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
     // Initialize state
     this._state = {
@@ -386,40 +389,46 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           <div class="input-area">
             <!-- Top Row: Context Pills & Quick Actions -->
             <div class="pills-row">
-              <div class="quick-actions">
+              <div class="quick-actions" role="toolbar" aria-label="Context tools">
                 <div class="mention-wrapper">
-                  <button class="icon-btn mention-btn" id="mention-btn" aria-label="Mention" title="Mention">
-                    <svg class="mention-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M8 2C5.24 2 3 4.24 3 7c0 1.5.7 2.83 1.8 3.7L3 14l3.3-1.8C7.17 13.3 8.5 14 10 14c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5"/>
-                      <path d="M8 5v4l3 2" stroke-linecap="round"/>
+                  <button class="icon-btn mention-btn" id="mention-btn" aria-label="Open mention menu" aria-haspopup="true" aria-expanded="false" title="Mention">
+                    <svg class="mention-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 4c-4.418 0-8 3.134-8 7s3.582 7 8 7c2.21 0 4-1.79 4-4V7.5a1.5 1.5 0 1 1 3 0V11c0 3.314-2.686 6-6 6s-6-2.686-6-6 2.686-6 6-6c1.657 0 3 1.343 3 3"/>
+                      <path d="M10 10.5c0 .828.672 1.5 1.5 1.5s1.5-.672 1.5-1.5-.672-1.5-1.5-1.5S10 9.672 10 10.5Z"/>
                     </svg>
                   </button>
-                  <div class="mention-picker" id="mention-picker">
+                  <div class="mention-picker" id="mention-picker" role="menu" aria-hidden="true">
                     <div class="mention-search-container">
-                      <svg class="mention-search-icon" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                      <svg class="mention-search-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="7" cy="7" r="5"/>
+                        <path d="M10.5 10.5L14 14"/>
                       </svg>
-                      <input type="text" class="mention-search-input" id="mention-search-input" placeholder="Add files, folders, docs..." autocomplete="off" />
+                      <input type="text" class="mention-search-input" id="mention-search-input" placeholder="Search context, files, actions..." autocomplete="off" aria-label="Filter mentions" />
                     </div>
-                    <div class="mention-list" id="mention-list"></div>
+                    <div class="mention-suggestions" id="mention-suggestions" role="listbox" tabindex="-1"></div>
                   </div>
                 </div>
-                <button class="icon-btn" id="memories-btn" aria-label="Memories" title="Memories">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                    <path d="M5 6H11M5 9H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <button class="icon-btn" id="memories-btn" aria-label="Open Denix memories" aria-haspopup="true" aria-expanded="false" title="Memories">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4.5 8.5C6 6 8.667 4 12 4s6 2 7.5 4.5"/>
+                    <path d="M4.5 15.5C6 18 8.667 20 12 20s6-2 7.5-4.5"/>
+                    <path d="M4 12h16"/>
+                    <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
                   </svg>
                 </button>
-                <button class="icon-btn" id="rules-btn" aria-label="Rules" title="Rules and Guidelines">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                    <path d="M5 5H11M5 8H11M5 11H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <button class="icon-btn" id="rules-btn" aria-label="Open rules and user guidelines" aria-haspopup="true" aria-expanded="false" title="Rules and Guidelines">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 4h9l3 3v13H6z"/>
+                    <path d="M15 4v3h3"/>
+                    <path d="M9 10h6M9 14h4"/>
+                    <path d="M4 9v11h11"/>
                   </svg>
                 </button>
-                <button class="icon-btn" id="selection-btn" aria-label="Selected Text" title="Selected Text">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <rect x="2" y="4" width="12" height="8" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                    <path d="M6 2V6M10 2V6M6 14V10M10 14V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <button class="icon-btn" id="selection-btn" aria-label="Show selected text actions" aria-haspopup="true" aria-expanded="false" title="Selected Text">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="6" width="16" height="12" rx="2"/>
+                    <path d="M8 2v4M16 2v4M8 18v4M16 18v-4"/>
+                    <path d="M9.5 11.5h5"/>
                   </svg>
                 </button>
               </div>
@@ -485,6 +494,88 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                   </svg>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Workspace Panels & Tooltips -->
+        <div class="panel-overlay" id="panel-overlay" aria-hidden="true"></div>
+
+        <section class="workspace-panel" id="memories-panel" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="memories-panel-title" tabindex="-1">
+          <div class="panel-header">
+            <div class="panel-header-text">
+              <p class="panel-eyebrow">Augment</p>
+              <div class="panel-title-group">
+                <h2 id="memories-panel-title">Memories</h2>
+                <span class="panel-dot">•</span>
+                <span class="panel-subtitle">Project knowledge graph</span>
+              </div>
+              <div class="panel-breadcrumbs" id="memories-breadcrumbs">Workspace · .denix · memories.md</div>
+            </div>
+            <div class="panel-header-actions">
+              <button class="toolbar-btn ghost" id="memories-open-file" aria-label="Open memories file in editor">Open file</button>
+              <button class="panel-close-btn" data-close-panel="memories" aria-label="Close memories panel">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                  <path d="M4 4l8 8M12 4l-8 8"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="panel-toolbar">
+            <button class="toolbar-btn" id="memories-toolbar-guidelines">User Guidelines</button>
+            <button class="toolbar-btn" id="memories-toolbar-rules">Rules</button>
+            <button class="toolbar-btn primary" id="memories-save">Save</button>
+          </div>
+          <div class="panel-body">
+            <textarea id="memories-editor" class="panel-editor" spellcheck="false" aria-label="Memories markdown editor"></textarea>
+          </div>
+        </section>
+
+        <section class="workspace-panel" id="rules-panel" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="rules-panel-title" tabindex="-1">
+          <div class="panel-header">
+            <div class="panel-header-text">
+              <p class="panel-eyebrow">Augment</p>
+              <h2 id="rules-panel-title">Rules &amp; User Guidelines</h2>
+              <div class="panel-breadcrumbs">Workspace · .denix · rules</div>
+            </div>
+            <div class="panel-header-actions">
+              <button class="panel-close-btn" data-close-panel="rules" aria-label="Close rules and guidelines panel">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                  <path d="M4 4l8 8M12 4l-8 8"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="panel-body rules-panel-body">
+            <div class="rules-column">
+              <div class="rules-toolbar">
+                <button class="toolbar-btn primary" id="create-rule-btn">Create new rule file</button>
+                <button class="toolbar-btn ghost" id="import-rule-btn">Import rules</button>
+              </div>
+              <div class="rules-dropzone" id="rules-dropzone" aria-label="Drop markdown files to import rules">
+                <p>Drop .md files to import rules</p>
+              </div>
+              <div class="rules-list" id="rules-list" aria-label="Existing rule files"></div>
+            </div>
+            <div class="guidelines-column">
+              <label for="guidelines-editor" class="panel-eyebrow">User Guidelines</label>
+              <textarea id="guidelines-editor" class="panel-editor" spellcheck="false" aria-label="User guidelines editor"></textarea>
+              <div class="guidelines-actions">
+                <button class="toolbar-btn ghost" id="guidelines-reset">Reset</button>
+                <button class="toolbar-btn primary" id="guidelines-save">Save guidelines</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="selection-tooltip" id="selection-tooltip" role="dialog" aria-hidden="true" tabindex="-1">
+          <div class="selection-tooltip-header">
+            <span>Selected text</span>
+          </div>
+          <div class="selection-preview" id="selection-preview" aria-live="polite">
+            <div class="selection-code-container">
+              <div class="selection-line-numbers" id="selection-line-numbers"></div>
+              <div class="selection-code-content" id="selection-code-content"></div>
             </div>
           </div>
         </div>
@@ -1038,6 +1129,66 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this._updateWebviewState();
         break;
 
+      case 'clearContext':
+        this.clearContextAttachments();
+        break;
+
+      case 'loadMemories':
+        {
+          const markdown = await this._memoriesManager.loadMemories();
+          this._sendMessageToWebview({ type: 'memoriesContent', data: markdown });
+        }
+        break;
+
+      case 'saveMemories':
+        if (typeof data.payload?.content === 'string') {
+          await this._memoriesManager.saveMemories(data.payload.content);
+        }
+        break;
+
+      case 'listRules':
+        {
+          const rules = await this._rulesManager.listRuleFiles();
+          this._sendMessageToWebview({ type: 'rulesList', data: rules });
+        }
+        break;
+
+      case 'createRule':
+        if (data.payload?.name) {
+          await this._rulesManager.createRuleFile(data.payload.name);
+          const updatedRules = await this._rulesManager.listRuleFiles();
+          this._sendMessageToWebview({ type: 'rulesList', data: updatedRules });
+        }
+        break;
+
+      case 'openRule':
+        if (data.payload?.path) {
+          try {
+            const document = await vscode.workspace.openTextDocument(data.payload.path);
+            await vscode.window.showTextDocument(document, { preview: false });
+          } catch (error) {
+            vscode.window.showErrorMessage(`Unable to open rule file: ${String(error)}`);
+          }
+        }
+        break;
+
+      case 'loadGuidelines':
+        {
+          const guidelines = await this._guidelinesManager.loadGuidelines();
+          this._sendMessageToWebview({ type: 'guidelinesContent', data: guidelines });
+        }
+        break;
+
+      case 'saveGuidelines':
+        if (typeof data.payload?.content === 'string') {
+          await this._guidelinesManager.saveGuidelines(data.payload.content);
+        }
+        break;
+
+      case 'importRules':
+        await this._handleImportRules(data.payload?.files);
+        break;
+
       case 'selectModel':
         const model = await vscode.window.showQuickPick([
           'anthropic/claude-3.5-sonnet',
@@ -1157,10 +1308,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _updateWebviewState(): void {
     if (this._view) {
       // Include context attachments in state
+      const selectionContext = this._selectionWatcher.getSelection();
       const stateWithContext = {
         ...this._state,
         contextAttachments: this._contextAttachments,
-        hasSelection: this._selectionWatcher.getSelection() !== null
+        hasSelection: selectionContext !== null,
+        selectionContext
       };
       this._sendMessageToWebview({
         type: 'updateState',
@@ -1798,6 +1951,45 @@ Make it:
     }
 
     return items;
+  }
+
+  private async _handleImportRules(paths?: string[]): Promise<void> {
+    try {
+      let sourceUris: vscode.Uri[] | undefined;
+      if (paths && paths.length > 0) {
+        sourceUris = paths.map(p => vscode.Uri.file(p));
+      } else {
+        const picked = await vscode.window.showOpenDialog({
+          canSelectMany: true,
+          title: 'Import rule files',
+          filters: { Markdown: ['md'] }
+        });
+        if (!picked) {
+          return;
+        }
+        sourceUris = picked;
+      }
+
+      for (const uri of sourceUris) {
+        try {
+          const buffer = await vscode.workspace.fs.readFile(uri);
+          const content = buffer.toString();
+          const baseName = path.basename(uri.fsPath).replace(/\.md$/i, '');
+          try {
+            await this._rulesManager.createRuleFile(baseName, content);
+          } catch {
+            await this._rulesManager.createRuleFile(`${baseName}-${Date.now()}`, content);
+          }
+        } catch (error) {
+          console.error('Failed to import rule file', error);
+        }
+      }
+
+      const rules = await this._rulesManager.listRuleFiles();
+      this._sendMessageToWebview({ type: 'rulesList', data: rules });
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to import rules: ${String(error)}`);
+    }
   }
 
   public async selectModel(): Promise<void> {

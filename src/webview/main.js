@@ -45,10 +45,29 @@
     mentionBtn: document.getElementById('mention-btn'),
     mentionPicker: document.getElementById('mention-picker'),
     mentionSearchInput: document.getElementById('mention-search-input'),
-    mentionList: document.getElementById('mention-list'),
+    mentionSuggestions: document.getElementById('mention-suggestions'),
     memoriesBtn: document.getElementById('memories-btn'),
     rulesBtn: document.getElementById('rules-btn'),
     selectionBtn: document.getElementById('selection-btn'),
+    panelOverlay: document.getElementById('panel-overlay'),
+    memoriesPanel: document.getElementById('memories-panel'),
+    memoriesEditor: document.getElementById('memories-editor'),
+    memoriesSaveBtn: document.getElementById('memories-save'),
+    memoriesOpenFileBtn: document.getElementById('memories-open-file'),
+    memoriesToolbarGuidelines: document.getElementById('memories-toolbar-guidelines'),
+    memoriesToolbarRules: document.getElementById('memories-toolbar-rules'),
+    rulesPanel: document.getElementById('rules-panel'),
+    rulesList: document.getElementById('rules-list'),
+    rulesDropzone: document.getElementById('rules-dropzone'),
+    createRuleBtn: document.getElementById('create-rule-btn'),
+    importRuleBtn: document.getElementById('import-rule-btn'),
+    guidelinesEditor: document.getElementById('guidelines-editor'),
+    guidelinesSaveBtn: document.getElementById('guidelines-save'),
+    guidelinesResetBtn: document.getElementById('guidelines-reset'),
+    selectionTooltip: document.getElementById('selection-tooltip'),
+    selectionPreview: document.getElementById('selection-preview'),
+    selectionLineNumbers: document.getElementById('selection-line-numbers'),
+    selectionCodeContent: document.getElementById('selection-code-content'),
     autoBtn: document.getElementById('auto-btn'),
     askQuestionBtn: document.getElementById('ask-question-btn'),
     enhanceBtn: document.getElementById('enhance-btn'),
@@ -63,8 +82,71 @@
   };
 
   // Mention picker state
+  const quickMentionItems = [
+    {
+      id: 'default-context',
+      label: 'Default Context',
+      description: 'Let Denix manage memories, rules, and selection automatically',
+      group: 'Quick Actions',
+      action: 'insert',
+      token: '@default-context',
+      icon: 'context'
+    },
+    {
+      id: 'focus-context',
+      label: 'Focus Context',
+      description: 'Restrict to the files and selection you pin',
+      group: 'Quick Actions',
+      action: 'insert',
+      token: '@focus-context',
+      icon: 'target'
+    },
+    {
+      id: 'clear-context',
+      label: 'Clear Context',
+      description: 'Remove all auto-attached context for this reply',
+      group: 'Quick Actions',
+      action: 'command',
+      command: 'clearContext'
+    },
+    {
+      id: 'denix-memories',
+      label: 'Denix memories',
+      description: 'Open workspace memories panel',
+      group: 'Knowledge Spaces',
+      action: 'panel',
+      panel: 'memories',
+      icon: 'memories'
+    },
+    {
+      id: 'rules-guidelines',
+      label: 'Rules & guidelines',
+      description: 'Edit workspace rules and user guidelines',
+      group: 'Knowledge Spaces',
+      action: 'panel',
+      panel: 'rules',
+      icon: 'rules'
+    },
+    {
+      id: 'selected-text',
+      label: 'Use selected text',
+      description: 'Insert the currently selected code or content',
+      group: 'Knowledge Spaces',
+      action: 'selection',
+      icon: 'selection'
+    }
+  ];
+
+  let workspaceMentionItems = [];
   let mentionItems = [];
   let selectedMentionIndex = -1;
+  let mentionSearchTerm = '';
+
+  // Panel state
+  let openPanelId = null;
+  let currentSelectionContext = null;
+  let currentRules = [];
+let pendingGuidelinesAppend = '';
 
   // Initialize
   function init() {
@@ -149,6 +231,13 @@
       toggleMentionPicker();
     });
 
+    elements.mentionBtn?.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        showMentionPicker(true);
+      }
+    });
+
     // Mention picker search
     elements.mentionSearchInput?.addEventListener('input', (e) => {
       handleMentionSearch(e.target.value);
@@ -165,17 +254,141 @@
       }
     });
 
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && elements.mentionPicker?.classList.contains('show')) {
+        hideMentionPicker(true);
+      }
+      if (e.key === 'Escape' && openPanelId) {
+        closePanel(openPanelId);
+      }
+    });
+
     elements.memoriesBtn?.addEventListener('click', () => {
-      sendMessage({ type: 'command', data: { command: 'openMemories' } });
+      togglePanel('memories');
     });
 
     elements.rulesBtn?.addEventListener('click', () => {
-      sendMessage({ type: 'command', data: { command: 'openSettings' } });
+      togglePanel('rules');
     });
 
-    elements.selectionBtn?.addEventListener('click', () => {
-      sendMessage({ type: 'command', data: { command: 'toggleSelection' } });
+    // Show tooltip on hover, hide when mouse leaves button or tooltip
+    // Show tooltip on hover, hide when mouse leaves button or tooltip
+    let hideTimeout = null;
+    
+    elements.selectionBtn?.addEventListener('mouseenter', () => {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+      if (currentSelectionContext) {
+        showSelectionTooltip();
+      }
     });
+    
+    elements.selectionBtn?.addEventListener('mouseleave', (e) => {
+      // Only hide if mouse is not moving to tooltip
+      if (!elements.selectionTooltip?.contains(e.relatedTarget)) {
+        // Add delay to prevent flickering when moving mouse
+        hideTimeout = setTimeout(() => {
+          hideSelectionTooltip();
+        }, 100);
+      }
+    });
+    
+    // Keep tooltip visible when hovering over it (including when scrolling)
+    elements.selectionTooltip?.addEventListener('mouseenter', () => {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+      if (currentSelectionContext) {
+        showSelectionTooltip();
+      }
+    });
+    
+    elements.selectionTooltip?.addEventListener('mouseleave', (e) => {
+      // Only hide if mouse is not moving back to button
+      if (!elements.selectionBtn?.contains(e.relatedTarget)) {
+        hideTimeout = setTimeout(() => {
+          hideSelectionTooltip();
+        }, 100);
+      }
+    });
+    
+    // Keep tooltip visible when mouse is over the preview area (for scrolling)
+    elements.selectionPreview?.addEventListener('mouseenter', () => {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+    });
+    
+    elements.selectionPreview?.addEventListener('mouseleave', (e) => {
+      // Only hide if mouse is not moving to tooltip or button
+      if (!elements.selectionTooltip?.contains(e.relatedTarget) && 
+          !elements.selectionBtn?.contains(e.relatedTarget)) {
+        hideTimeout = setTimeout(() => {
+          hideSelectionTooltip();
+        }, 100);
+      }
+    });
+
+    // Panel overlay + close buttons
+    elements.panelOverlay?.addEventListener('click', () => {
+      if (openPanelId) {
+        closePanel(openPanelId);
+      }
+    });
+
+    document.querySelectorAll('.panel-close-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const panel = btn.getAttribute('data-close-panel');
+        if (panel) {
+          closePanel(panel);
+        }
+      });
+    });
+
+    // Memories panel events
+    elements.memoriesSaveBtn?.addEventListener('click', () => saveMemories());
+    elements.memoriesOpenFileBtn?.addEventListener('click', () => {
+      sendMessage({ type: 'command', data: { command: 'openMemories' } });
+    });
+    elements.memoriesToolbarGuidelines?.addEventListener('click', () => openPanel('rules'));
+    elements.memoriesToolbarRules?.addEventListener('click', () => openPanel('rules'));
+    elements.memoriesEditor?.addEventListener('input', () => {
+      if (elements.memoriesSaveBtn) {
+        elements.memoriesSaveBtn.dataset.dirty = 'true';
+      }
+    });
+
+    // Rules panel events
+    elements.createRuleBtn?.addEventListener('click', () => promptCreateRule());
+    elements.importRuleBtn?.addEventListener('click', () => {
+      sendMessage({ type: 'command', data: { command: 'importRules' } });
+    });
+    elements.guidelinesSaveBtn?.addEventListener('click', () => saveGuidelines());
+    elements.guidelinesResetBtn?.addEventListener('click', () => loadGuidelines());
+    elements.guidelinesEditor?.addEventListener('input', () => {
+      elements.guidelinesSaveBtn?.classList.add('pulse');
+    });
+
+    elements.rulesDropzone?.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      elements.rulesDropzone.classList.add('dragging');
+    });
+    elements.rulesDropzone?.addEventListener('dragleave', () => {
+      elements.rulesDropzone.classList.remove('dragging');
+    });
+    elements.rulesDropzone?.addEventListener('drop', (event) => {
+      event.preventDefault();
+      elements.rulesDropzone.classList.remove('dragging');
+      const files = [...event.dataTransfer.files].map(file => file.path);
+      if (files.length) {
+        sendMessage({ type: 'command', data: { command: 'importRules', payload: { files } } });
+      }
+    });
+
 
     // Bottom row actions
     elements.autoBtn?.addEventListener('click', () => {
@@ -222,6 +435,8 @@
         if (!elements.sendBtn?.disabled) {
           sendUserMessage();
         }
+      } else if (e.key === '@' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setTimeout(() => showMentionPicker(false), 0);
       } else if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         clearAllAttachments();
@@ -299,6 +514,18 @@
       case 'getCurrentPrompt':
         sendMessage({ type: 'currentPrompt', data: elements.messageInput.value });
         break;
+      case 'mentionItems':
+        renderMentionItems(message.data || []);
+        break;
+      case 'memoriesContent':
+        applyMemoriesContent(message.data || '');
+        break;
+      case 'guidelinesContent':
+        applyGuidelinesContent(message.data || '');
+        break;
+      case 'rulesList':
+        renderRulesList(message.data || []);
+        break;
       default:
         console.log('Unknown message type:', message.type);
     }
@@ -307,6 +534,9 @@
   // Update state and UI
   function updateState(newState) {
     state = { ...state, ...newState };
+    if (Object.prototype.hasOwnProperty.call(newState || {}, 'selectionContext')) {
+      updateSelectionContext(newState.selectionContext || null);
+    }
     renderMessages();
     renderAttachments();
     updateUI();
@@ -1162,40 +1392,43 @@
   // Mention Picker Functions
   function toggleMentionPicker() {
     if (elements.mentionPicker?.classList.contains('show')) {
-      hideMentionPicker();
+      hideMentionPicker(true);
     } else {
-      showMentionPicker();
+      showMentionPicker(true);
     }
   }
 
-  function showMentionPicker() {
+  function showMentionPicker(focusSearch = false) {
     if (!elements.mentionPicker || !elements.mentionBtn) return;
-    
     elements.mentionPicker.classList.add('show');
+    elements.mentionPicker.setAttribute('aria-hidden', 'false');
     elements.mentionBtn.classList.add('active');
-    
-    // Focus search input
-    setTimeout(() => {
-      elements.mentionSearchInput?.focus();
-    }, 10);
-    
-    // Load mention items
-    loadMentionItems('');
-  }
-
-  function hideMentionPicker() {
-    if (!elements.mentionPicker || !elements.mentionBtn) return;
-    
-    elements.mentionPicker.classList.remove('show');
-    elements.mentionBtn.classList.remove('active');
+    elements.mentionBtn.setAttribute('aria-expanded', 'true');
     selectedMentionIndex = -1;
-    
     if (elements.mentionSearchInput) {
       elements.mentionSearchInput.value = '';
     }
+    mentionSearchTerm = '';
+    renderMentionItems(workspaceMentionItems);
+    requestMentionItems('');
+    if (focusSearch) {
+      setTimeout(() => elements.mentionSearchInput?.focus(), 10);
+    }
   }
 
-  function loadMentionItems(query = '') {
+  function hideMentionPicker(returnFocus = false) {
+    if (!elements.mentionPicker || !elements.mentionBtn) return;
+    elements.mentionPicker.classList.remove('show');
+    elements.mentionPicker.setAttribute('aria-hidden', 'true');
+    elements.mentionBtn.classList.remove('active');
+    elements.mentionBtn.setAttribute('aria-expanded', 'false');
+    selectedMentionIndex = -1;
+    if (returnFocus) {
+      elements.mentionBtn.focus();
+    }
+  }
+
+  function requestMentionItems(query = '') {
     sendMessage({
       type: 'getMentionItems',
       data: { query }
@@ -1203,35 +1436,38 @@
   }
 
   function handleMentionSearch(query) {
-    loadMentionItems(query);
+    mentionSearchTerm = query.toLowerCase();
+    renderMentionItems(workspaceMentionItems);
   }
 
   function handleMentionKeydown(e) {
-    if (!elements.mentionList) return;
-
-    const items = elements.mentionList.querySelectorAll('.mention-item');
-    if (items.length === 0) return;
-
+    if (!elements.mentionSuggestions?.children.length) {
+      return;
+    }
+    const items = elements.mentionSuggestions.querySelectorAll('.mention-item');
+    if (!items.length) {
+      return;
+    }
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        selectedMentionIndex = Math.min(selectedMentionIndex + 1, items.length - 1);
+        selectedMentionIndex = Math.min(selectedMentionIndex + 1, mentionItems.length - 1);
         updateMentionSelection(items);
         break;
       case 'ArrowUp':
         e.preventDefault();
-        selectedMentionIndex = Math.max(selectedMentionIndex - 1, -1);
+        selectedMentionIndex = Math.max(selectedMentionIndex - 1, 0);
         updateMentionSelection(items);
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedMentionIndex >= 0 && items[selectedMentionIndex]) {
-          selectMentionItem(mentionItems[selectedMentionIndex]);
+        if (mentionItems[selectedMentionIndex]) {
+          performMentionAction(mentionItems[selectedMentionIndex]);
         }
         break;
       case 'Escape':
         e.preventDefault();
-        hideMentionPicker();
+        hideMentionPicker(true);
         break;
     }
   }
@@ -1240,123 +1476,388 @@
     items.forEach((item, index) => {
       if (index === selectedMentionIndex) {
         item.classList.add('selected');
-        item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        item.scrollIntoView({ block: 'nearest' });
       } else {
         item.classList.remove('selected');
       }
     });
   }
 
-  function selectMentionItem(item) {
-    if (!item || !elements.messageInput) return;
+  function performMentionAction(item) {
+    if (!item) return;
+    switch (item.action) {
+      case 'insert':
+        insertMentionToken(item.token || `@${item.label}`);
+        hideMentionPicker(true);
+        break;
+      case 'command':
+        if (item.command === 'clearContext') {
+          sendMessage({ type: 'command', data: { command: 'clearContext' } });
+        }
+        hideMentionPicker(true);
+        break;
+      case 'panel':
+        hideMentionPicker(true);
+        togglePanel(item.panel);
+        break;
+      case 'selection':
+        insertSelectionIntoInput();
+        hideMentionPicker(true);
+        break;
+      default:
+        insertMentionToken(item.token || `@${item.label}`);
+        hideMentionPicker(true);
+        break;
+    }
+  }
 
-    // Insert mention into textarea
-    const mentionText = item.path ? `@${item.path}` : `@${item.label}`;
+  function insertMentionToken(token) {
+    if (!elements.messageInput) return;
     const textarea = elements.messageInput;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const text = textarea.value;
-    const newText = text.substring(0, start) + mentionText + ' ' + text.substring(end);
-    
-    textarea.value = newText;
+    const insertText = `${token} `;
+    textarea.value = text.slice(0, start) + insertText + text.slice(end);
     textarea.focus();
-    textarea.setSelectionRange(start + mentionText.length + 1, start + mentionText.length + 1);
-    
-    // Auto-resize
+    const cursor = start + insertText.length;
+    textarea.setSelectionRange(cursor, cursor);
     textarea.style.height = 'auto';
     textarea.style.height = textarea.scrollHeight + 'px';
-    
-    // Update send button state
     updateSendButtonState();
-    
-    // Hide picker
-    hideMentionPicker();
   }
 
-  function renderMentionItems(items) {
-    if (!elements.mentionList) return;
+  function renderMentionItems(itemsFromExtension = []) {
+    workspaceMentionItems = itemsFromExtension.map(item => ({
+      id: item.path || item.label,
+      label: item.label,
+      description: item.path || item.category,
+      group: item.category || 'Workspace',
+      action: 'insert',
+      token: item.path ? `@${item.path}` : `@${item.label}`,
+      icon: item.icon || item.type
+    }));
 
-    mentionItems = items;
-    selectedMentionIndex = -1;
+    const filtered = [...quickMentionItems, ...workspaceMentionItems].filter(item => {
+      if (!mentionSearchTerm) return true;
+      return (
+        item.label.toLowerCase().includes(mentionSearchTerm) ||
+        (item.description || '').toLowerCase().includes(mentionSearchTerm)
+      );
+    });
 
-    if (items.length === 0) {
-      elements.mentionList.innerHTML = '<div class="mention-empty">No items found</div>';
+    mentionItems = filtered;
+    selectedMentionIndex = filtered.length ? 0 : -1;
+
+    if (!elements.mentionSuggestions) return;
+    if (!filtered.length) {
+      elements.mentionSuggestions.innerHTML = '<div class="mention-empty">No matches found</div>';
       return;
     }
 
-    // Group items by category
-    const grouped = {};
-    items.forEach(item => {
-      if (!grouped[item.category]) {
-        grouped[item.category] = [];
-      }
-      grouped[item.category].push(item);
-    });
+    const grouped = filtered.reduce((acc, item) => {
+      acc[item.group] = acc[item.group] || [];
+      acc[item.group].push(item);
+      return acc;
+    }, {});
 
+    const order = Object.keys(grouped);
     let html = '';
-    const categories = Object.keys(grouped).sort();
-
-    categories.forEach(category => {
-      html += `<div class="mention-category">${category}</div>`;
-      grouped[category].forEach(item => {
-        const icon = getMentionIcon(item.icon, item.type);
-        const path = item.path ? `<div class="mention-item-path">${item.path}</div>` : '';
-        const hasSubmenu = item.hasSubmenu ? 'has-submenu' : '';
-        const arrow = item.hasSubmenu ? `
-          <svg class="mention-item-arrow" width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-            <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          </svg>
-        ` : '';
+    order.forEach(group => {
+      html += `<div class="mention-category">${group}</div>`;
+      grouped[group].forEach((item, index) => {
+        const globalIndex = mentionItems.indexOf(item);
+        const icon = getMentionIcon(item.icon);
         html += `
-          <button class="mention-item ${hasSubmenu}" data-type="${item.type}" data-label="${escapeHtml(item.label)}" data-path="${item.path ? escapeHtml(item.path) : ''}" data-has-submenu="${item.hasSubmenu || false}">
+          <button class="mention-item" role="option" data-index="${globalIndex}">
             <div class="mention-item-icon">${icon}</div>
             <div class="mention-item-content">
               <div class="mention-item-label">${escapeHtml(item.label)}</div>
-              ${path}
+              <div class="mention-item-path">${escapeHtml(item.description || '')}</div>
             </div>
-            ${arrow}
           </button>
         `;
       });
     });
 
-    elements.mentionList.innerHTML = html;
-
-    // Add click listeners
-    elements.mentionList.querySelectorAll('.mention-item').forEach((item, index) => {
+    elements.mentionSuggestions.innerHTML = html;
+    const renderedItems = elements.mentionSuggestions.querySelectorAll('.mention-item');
+    renderedItems.forEach(item => {
       item.addEventListener('click', () => {
-        const itemData = items.find(i => 
-          i.label === item.dataset.label && 
-          (i.path || '') === (item.dataset.path || '')
-        );
-        if (itemData) {
-          selectMentionItem(itemData);
+        const index = Number(item.getAttribute('data-index'));
+        performMentionAction(mentionItems[index]);
+      });
+    });
+    updateMentionSelection(renderedItems);
+  }
+
+  function getMentionIcon(iconType) {
+    const icons = {
+      context: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2"/></svg>',
+      target: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5"/><path d="M8 3v2M8 11v2M3 8h2M11 8h2"/></svg>',
+      memories: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5c1.2-2 3.2-3 5-3s3.8 1 5 3M3 11c1.2 2 3.2 3 5 3s3.8-1 5-3M3 8h10"/><circle cx="8" cy="8" r="1"/></svg>',
+      rules: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h6l2 2v10H4z"/><path d="M10 2v2h2"/><path d="M6 7h4M6 10h3"/></svg>',
+      selection: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="10" height="6" rx="1"/><path d="M6 2v3M10 2v3M6 11v3M10 11v3"/></svg>',
+      file: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 2h5l3 3v9H5z"/><path d="M10 2v3h3"/></svg>'
+    };
+    return icons[iconType] || icons.file;
+  }
+
+  // Panel helpers
+  function togglePanel(panelId) {
+    if (openPanelId === panelId) {
+      closePanel(panelId);
+    } else {
+      openPanel(panelId);
+    }
+  }
+
+  function openPanel(panelId) {
+    const panelEl = panelId === 'memories' ? elements.memoriesPanel : elements.rulesPanel;
+    if (!panelEl) return;
+    openPanelId = panelId;
+    panelEl.classList.add('open');
+    panelEl.setAttribute('aria-hidden', 'false');
+    elements.panelOverlay?.classList.add('show');
+    panelEl.focus();
+
+    if (panelId === 'memories') {
+      loadMemories();
+    } else if (panelId === 'rules') {
+      loadRules();
+      loadGuidelines();
+    }
+  }
+
+  function closePanel(panelId) {
+    const panelEl = panelId === 'memories' ? elements.memoriesPanel : elements.rulesPanel;
+    if (!panelEl) return;
+    panelEl.classList.remove('open');
+    panelEl.setAttribute('aria-hidden', 'true');
+    if (openPanelId === panelId) {
+      openPanelId = null;
+    }
+    if (!openPanelId) {
+      elements.panelOverlay?.classList.remove('show');
+    }
+  }
+
+  function loadMemories() {
+    sendMessage({ type: 'command', data: { command: 'loadMemories' } });
+  }
+
+  function saveMemories() {
+    if (!elements.memoriesEditor) return;
+    sendMessage({
+      type: 'command',
+      data: {
+        command: 'saveMemories',
+        payload: { content: elements.memoriesEditor.value }
+      }
+    });
+    elements.memoriesSaveBtn?.removeAttribute('data-dirty');
+    showToast('Memories saved', 'success');
+  }
+
+  function applyMemoriesContent(markdown) {
+    if (!elements.memoriesEditor) return;
+    elements.memoriesEditor.value = markdown;
+    elements.memoriesEditor.scrollTop = 0;
+    elements.memoriesSaveBtn?.removeAttribute('data-dirty');
+  }
+
+  function loadRules() {
+    sendMessage({ type: 'command', data: { command: 'listRules' } });
+  }
+
+  function renderRulesList(rules) {
+    currentRules = rules;
+    if (!elements.rulesList) return;
+    if (!rules.length) {
+      elements.rulesList.innerHTML = '<div class="rules-empty">No rule files yet. Create one to define constraints.</div>';
+      return;
+    }
+    const items = rules.map(rule => `
+      <article class="rule-card">
+        <div>
+          <h4>${escapeHtml(rule.name)}</h4>
+          <p>${escapeHtml(rule.path || '')}</p>
+        </div>
+        <div class="rule-card-actions">
+          <button class="toolbar-btn ghost" data-open-rule="${escapeHtml(rule.name)}">Open</button>
+        </div>
+      </article>
+    `).join('');
+    elements.rulesList.innerHTML = items;
+    elements.rulesList.querySelectorAll('[data-open-rule]').forEach(button => {
+      button.addEventListener('click', () => {
+        const name = button.getAttribute('data-open-rule');
+        const rule = currentRules.find(r => r.name === name);
+        if (rule) {
+          sendMessage({ type: 'command', data: { command: 'openRule', payload: { path: rule.path } } });
         }
       });
     });
   }
 
-  function getMentionIcon(iconType, itemType) {
-    const icons = {
-      // File icon (document)
-      file: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4V2zm1 1v10h6V3H5z"/></svg>',
-      // Code file icon (blue, for TypeScript/JS files)
-      code: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1f6feb" stroke-width="1.5"><path d="M4 2h8v12H4V2zm1 1v10h6V3H5z"/><path d="M6 6l2 2-2 2M10 6l-2 2 2 2" stroke="#1f6feb" stroke-width="1.5" stroke-linecap="round"/></svg>',
-      // Folder icon
-      folder: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#d4a574" stroke-width="1.5"><path d="M2 3h5l1 2h6v9H2V3zm1 1v8h10V6H7L6 4H3z"/></svg>',
-      // Commit message icon
-      commit: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4V2zm1 1v10h6V3H5z"/><path d="M6 5h4M6 8h4M6 11h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
-      // Docs icon (document stack)
-      docs: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v10H4V2zm1 1v8h6V3H5z"/><path d="M5 4h6v8H5V4z" opacity="0.5"/></svg>',
-      doc: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12H4V2zm1 1v10h6V3H5z"/></svg>',
-      // Terminal icon
-      terminal: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M5 7l2 2-2 2M10 9h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
-      // Branch icon (git)
-      branch: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6c0 1.1.9 2 2 2h2v2c0 1.1.9 2 2 2h2c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2H9c-1.1 0-2 .9-2 2v2H5c-1.1 0-2-.9-2-2V6z"/><circle cx="5" cy="6" r="1.5"/><circle cx="11" cy="6" r="1.5"/><circle cx="11" cy="12" r="1.5"/></svg>',
-      // Browser icon (globe)
-      browser: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a10 10 0 0 1 2.5 6 10 10 0 0 1-2.5 6 10 10 0 0 1-2.5-6 10 10 0 0 1 2.5-6z"/></svg>'
-    };
-    return icons[iconType] || icons[itemType] || icons.file;
+  function promptCreateRule() {
+    const name = window.prompt('Name for the new rule file (e.g. branch-guardrails)');
+    if (!name) return;
+    sendMessage({ type: 'command', data: { command: 'createRule', payload: { name } } });
+  }
+
+  function loadGuidelines() {
+    sendMessage({ type: 'command', data: { command: 'loadGuidelines' } });
+  }
+
+  function saveGuidelines() {
+    if (!elements.guidelinesEditor) return;
+    sendMessage({
+      type: 'command',
+      data: {
+        command: 'saveGuidelines',
+        payload: { content: elements.guidelinesEditor.value }
+      }
+    });
+    elements.guidelinesSaveBtn?.classList.remove('pulse');
+    showToast('Guidelines saved', 'success');
+  }
+
+  function applyGuidelinesContent(text) {
+    if (!elements.guidelinesEditor) return;
+    elements.guidelinesEditor.value = text;
+    elements.guidelinesEditor.scrollTop = 0;
+    elements.guidelinesSaveBtn?.classList.remove('pulse');
+    applyPendingGuidelinesAppend();
+  }
+
+  function applyPendingGuidelinesAppend() {
+    if (!pendingGuidelinesAppend || !elements.guidelinesEditor) return;
+    elements.guidelinesEditor.value = (elements.guidelinesEditor.value || '') + pendingGuidelinesAppend;
+    pendingGuidelinesAppend = '';
+    elements.guidelinesSaveBtn?.classList.add('pulse');
+  }
+
+  // Selection helpers
+  function updateSelectionContext(selection) {
+    currentSelectionContext = selection;
+    const hasSelection = !!selection;
+    if (elements.selectionBtn) {
+      elements.selectionBtn.disabled = !hasSelection;
+      elements.selectionBtn.classList.toggle('disabled', !hasSelection);
+    }
+    if (hasSelection) {
+      updateSelectionPreview();
+    } else {
+      hideSelectionTooltip();
+    }
+  }
+
+  function updateSelectionPreview() {
+    if (!elements.selectionPreview || !currentSelectionContext) return;
+    const text = currentSelectionContext.text || '';
+    if (!text.trim()) {
+      if (elements.selectionLineNumbers) elements.selectionLineNumbers.innerHTML = '';
+      if (elements.selectionCodeContent) elements.selectionCodeContent.textContent = 'No selected text available.';
+      return;
+    }
+
+    // Get line numbers from selection context
+    const startLine = currentSelectionContext.startLine || 1;
+    const lines = text.split('\n');
+    const maxLines = 20; // Limit display to 20 lines
+    const displayLines = lines.slice(0, maxLines);
+    const hasMore = lines.length > maxLines;
+
+    // Generate line numbers
+    let lineNumbersHtml = '';
+    let codeContentHtml = '';
+    
+    displayLines.forEach((line, index) => {
+      const lineNum = startLine + index;
+      lineNumbersHtml += `<div class="selection-line-number">${lineNum}</div>`;
+      
+      // Basic syntax highlighting for common patterns
+      let highlightedLine = escapeHtml(line);
+      
+      // Highlight strings
+      highlightedLine = highlightedLine.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, '<span class="code-string">$&</span>');
+      
+      // Highlight numbers
+      highlightedLine = highlightedLine.replace(/\b(\d+\.?\d*)\b/g, '<span class="code-number">$1</span>');
+      
+      // Highlight keywords (basic set)
+      const keywords = ['function', 'const', 'let', 'var', 'if', 'else', 'for', 'while', 'return', 'import', 'export', 'class', 'extends', 'async', 'await', 'try', 'catch', 'finally', 'throw', 'new', 'this', 'super', 'static', 'public', 'private', 'protected', 'interface', 'type', 'enum', 'namespace', 'module', 'declare', 'abstract', 'readonly', 'void', 'null', 'undefined', 'true', 'false'];
+      keywords.forEach(keyword => {
+        const regex = new RegExp(`\\b${keyword}\\b`, 'g');
+        highlightedLine = highlightedLine.replace(regex, `<span class="code-keyword">${keyword}</span>`);
+      });
+      
+      // Highlight comments
+      highlightedLine = highlightedLine.replace(/(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, '<span class="code-comment">$1</span>');
+      
+      codeContentHtml += `<div class="selection-code-line">${highlightedLine || ' '}</div>`;
+    });
+
+    if (hasMore) {
+      lineNumbersHtml += `<div class="selection-line-number">...</div>`;
+      codeContentHtml += `<div class="selection-code-line code-more">... ${lines.length - maxLines} more lines</div>`;
+    }
+
+    if (elements.selectionLineNumbers) {
+      elements.selectionLineNumbers.innerHTML = lineNumbersHtml;
+    }
+    if (elements.selectionCodeContent) {
+      elements.selectionCodeContent.innerHTML = codeContentHtml;
+    }
+  }
+
+  function showSelectionTooltip() {
+    if (!currentSelectionContext || !elements.selectionTooltip || !elements.selectionBtn) return;
+    updateSelectionPreview();
+    
+    // Position above the input area (footer chat panel)
+    const inputArea = document.querySelector('.input-area');
+    if (inputArea) {
+      const rect = inputArea.getBoundingClientRect();
+      elements.selectionTooltip.style.bottom = `${window.innerHeight - rect.top + 8}px`;
+      elements.selectionTooltip.style.left = `${rect.left}px`;
+      elements.selectionTooltip.style.right = `${window.innerWidth - rect.right}px`;
+      elements.selectionTooltip.style.top = 'auto';
+      elements.selectionTooltip.style.width = `${rect.width}px`;
+      elements.selectionTooltip.style.maxWidth = 'none';
+    } else {
+      // Fallback to button position
+      const rect = elements.selectionBtn.getBoundingClientRect();
+      elements.selectionTooltip.style.top = `${rect.bottom + 8 + window.scrollY}px`;
+      elements.selectionTooltip.style.left = `${rect.left + window.scrollX}px`;
+    }
+    
+    elements.selectionTooltip.classList.add('show');
+    elements.selectionTooltip.setAttribute('aria-hidden', 'false');
+  }
+
+  function hideSelectionTooltip() {
+    elements.selectionTooltip?.classList.remove('show');
+    elements.selectionTooltip?.setAttribute('aria-hidden', 'true');
+  }
+
+  function moveSelectionToGuidelines() {
+    if (!currentSelectionContext?.text) return;
+    const addition = `\n\n## Context from ${currentSelectionContext.relativePath}\n${currentSelectionContext.text.trim()}\n`;
+    pendingGuidelinesAppend = addition;
+    if (openPanelId !== 'rules') {
+      openPanel('rules');
+    } else {
+      applyPendingGuidelinesAppend();
+    }
+  }
+
+  function insertSelectionIntoInput() {
+    if (!currentSelectionContext?.text || !elements.messageInput) return;
+    const block = `\n> ${currentSelectionContext.text.trim().replace(/\n/g, '\n> ')}\n`;
+    insertMentionToken(block);
+    hideSelectionTooltip();
   }
 
   function escapeHtml(text) {
@@ -1440,36 +1941,6 @@
   function sendMessage(message) {
     vscode.postMessage(message);
   }
-
-  // Handle messages from extension
-  window.addEventListener('message', event => {
-    const message = event.data;
-    switch (message.type) {
-      case 'mentionItems':
-        renderMentionItems(message.data || []);
-        break;
-      case 'updateState':
-        if (message.data) {
-          Object.assign(state, message.data);
-          updateUI();
-        }
-        break;
-      case 'enhancedPrompt':
-        if (elements.messageInput && message.data) {
-          elements.messageInput.value = message.data;
-          elements.messageInput.style.height = 'auto';
-          elements.messageInput.style.height = elements.messageInput.scrollHeight + 'px';
-          updateSendButtonState();
-        }
-        break;
-      case 'currentPrompt':
-        // This is handled by webview sending current prompt
-        break;
-      default:
-        // Handle other message types
-        break;
-    }
-  });
 
   // Initialize on load
   init();
