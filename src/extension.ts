@@ -6,6 +6,7 @@ import { GuidelinesManager } from './features/guidelines';
 import { SelectionWatcher } from './features/selection';
 import { QuickQuestionService } from './features/askQuestion';
 import { ContextManager } from './storage/contextManager';
+import { MemoriesEditorProvider } from './ui/memoriesEditor';
 
 /**
  * Extension activation function
@@ -45,6 +46,26 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider(
       ChatPanelProvider.viewType,
       provider
+    )
+  );
+
+  // Register custom editor for memories
+  const memoriesEditorProvider = new MemoriesEditorProvider(
+    context.extensionUri,
+    rulesManager,
+    guidelinesManager
+  );
+  
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      MemoriesEditorProvider.viewType,
+      memoriesEditorProvider,
+      {
+        webviewOptions: {
+          retainContextWhenHidden: true
+        },
+        supportsMultipleEditorsPerDocument: false
+      }
     )
   );
 

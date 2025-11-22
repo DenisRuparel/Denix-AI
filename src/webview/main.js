@@ -50,12 +50,6 @@
     rulesBtn: document.getElementById('rules-btn'),
     selectionBtn: document.getElementById('selection-btn'),
     panelOverlay: document.getElementById('panel-overlay'),
-    memoriesPanel: document.getElementById('memories-panel'),
-    memoriesEditor: document.getElementById('memories-editor'),
-    memoriesSaveBtn: document.getElementById('memories-save'),
-    memoriesOpenFileBtn: document.getElementById('memories-open-file'),
-    memoriesToolbarGuidelines: document.getElementById('memories-toolbar-guidelines'),
-    memoriesToolbarRules: document.getElementById('memories-toolbar-rules'),
     rulesPanel: document.getElementById('rules-panel'),
     rulesList: document.getElementById('rules-list'),
     rulesDropzone: document.getElementById('rules-dropzone'),
@@ -64,10 +58,6 @@
     guidelinesEditor: document.getElementById('guidelines-editor'),
     guidelinesSaveBtn: document.getElementById('guidelines-save'),
     guidelinesResetBtn: document.getElementById('guidelines-reset'),
-    selectionTooltip: document.getElementById('selection-tooltip'),
-    selectionPreview: document.getElementById('selection-preview'),
-    selectionLineNumbers: document.getElementById('selection-line-numbers'),
-    selectionCodeContent: document.getElementById('selection-code-content'),
     autoBtn: document.getElementById('auto-btn'),
     askQuestionBtn: document.getElementById('ask-question-btn'),
     enhanceBtn: document.getElementById('enhance-btn'),
@@ -146,7 +136,6 @@
   let openPanelId = null;
   let currentSelectionContext = null;
   let currentRules = [];
-let pendingGuidelinesAppend = '';
 
   // Initialize
   function init() {
@@ -264,7 +253,7 @@ let pendingGuidelinesAppend = '';
     });
 
     elements.memoriesBtn?.addEventListener('click', () => {
-      togglePanel('memories');
+      sendMessage({ type: 'command', data: { command: 'openMemories' } });
     });
 
     elements.rulesBtn?.addEventListener('click', () => {
@@ -272,65 +261,9 @@ let pendingGuidelinesAppend = '';
     });
 
     // Show tooltip on hover, hide when mouse leaves button or tooltip
-    // Show tooltip on hover, hide when mouse leaves button or tooltip
-    let hideTimeout = null;
-    
-    elements.selectionBtn?.addEventListener('mouseenter', () => {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
-      if (currentSelectionContext) {
-        showSelectionTooltip();
-      }
-    });
-    
-    elements.selectionBtn?.addEventListener('mouseleave', (e) => {
-      // Only hide if mouse is not moving to tooltip
-      if (!elements.selectionTooltip?.contains(e.relatedTarget)) {
-        // Add delay to prevent flickering when moving mouse
-        hideTimeout = setTimeout(() => {
-          hideSelectionTooltip();
-        }, 100);
-      }
-    });
-    
-    // Keep tooltip visible when hovering over it (including when scrolling)
-    elements.selectionTooltip?.addEventListener('mouseenter', () => {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
-      if (currentSelectionContext) {
-        showSelectionTooltip();
-      }
-    });
-    
-    elements.selectionTooltip?.addEventListener('mouseleave', (e) => {
-      // Only hide if mouse is not moving back to button
-      if (!elements.selectionBtn?.contains(e.relatedTarget)) {
-        hideTimeout = setTimeout(() => {
-          hideSelectionTooltip();
-        }, 100);
-      }
-    });
-    
-    // Keep tooltip visible when mouse is over the preview area (for scrolling)
-    elements.selectionPreview?.addEventListener('mouseenter', () => {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
-    });
-    
-    elements.selectionPreview?.addEventListener('mouseleave', (e) => {
-      // Only hide if mouse is not moving to tooltip or button
-      if (!elements.selectionTooltip?.contains(e.relatedTarget) && 
-          !elements.selectionBtn?.contains(e.relatedTarget)) {
-        hideTimeout = setTimeout(() => {
-          hideSelectionTooltip();
-        }, 100);
-      }
+    // Selection button - no tooltip, just toggle selection context
+    elements.selectionBtn?.addEventListener('click', () => {
+      sendMessage({ type: 'command', data: { command: 'toggleSelection' } });
     });
 
     // Panel overlay + close buttons
@@ -349,18 +282,6 @@ let pendingGuidelinesAppend = '';
       });
     });
 
-    // Memories panel events
-    elements.memoriesSaveBtn?.addEventListener('click', () => saveMemories());
-    elements.memoriesOpenFileBtn?.addEventListener('click', () => {
-      sendMessage({ type: 'command', data: { command: 'openMemories' } });
-    });
-    elements.memoriesToolbarGuidelines?.addEventListener('click', () => openPanel('rules'));
-    elements.memoriesToolbarRules?.addEventListener('click', () => openPanel('rules'));
-    elements.memoriesEditor?.addEventListener('input', () => {
-      if (elements.memoriesSaveBtn) {
-        elements.memoriesSaveBtn.dataset.dirty = 'true';
-      }
-    });
 
     // Rules panel events
     elements.createRuleBtn?.addEventListener('click', () => promptCreateRule());
@@ -517,9 +438,6 @@ let pendingGuidelinesAppend = '';
       case 'mentionItems':
         renderMentionItems(message.data || []);
         break;
-      case 'memoriesContent':
-        applyMemoriesContent(message.data || '');
-        break;
       case 'guidelinesContent':
         applyGuidelinesContent(message.data || '');
         break;
@@ -534,9 +452,6 @@ let pendingGuidelinesAppend = '';
   // Update state and UI
   function updateState(newState) {
     state = { ...state, ...newState };
-    if (Object.prototype.hasOwnProperty.call(newState || {}, 'selectionContext')) {
-      updateSelectionContext(newState.selectionContext || null);
-    }
     renderMessages();
     renderAttachments();
     updateUI();
@@ -1613,7 +1528,7 @@ let pendingGuidelinesAppend = '';
   }
 
   function openPanel(panelId) {
-    const panelEl = panelId === 'memories' ? elements.memoriesPanel : elements.rulesPanel;
+    const panelEl = elements.rulesPanel;
     if (!panelEl) return;
     openPanelId = panelId;
     panelEl.classList.add('open');
@@ -1621,16 +1536,14 @@ let pendingGuidelinesAppend = '';
     elements.panelOverlay?.classList.add('show');
     panelEl.focus();
 
-    if (panelId === 'memories') {
-      loadMemories();
-    } else if (panelId === 'rules') {
+    if (panelId === 'rules') {
       loadRules();
       loadGuidelines();
     }
   }
 
   function closePanel(panelId) {
-    const panelEl = panelId === 'memories' ? elements.memoriesPanel : elements.rulesPanel;
+    const panelEl = elements.rulesPanel;
     if (!panelEl) return;
     panelEl.classList.remove('open');
     panelEl.setAttribute('aria-hidden', 'true');
@@ -1642,29 +1555,6 @@ let pendingGuidelinesAppend = '';
     }
   }
 
-  function loadMemories() {
-    sendMessage({ type: 'command', data: { command: 'loadMemories' } });
-  }
-
-  function saveMemories() {
-    if (!elements.memoriesEditor) return;
-    sendMessage({
-      type: 'command',
-      data: {
-        command: 'saveMemories',
-        payload: { content: elements.memoriesEditor.value }
-      }
-    });
-    elements.memoriesSaveBtn?.removeAttribute('data-dirty');
-    showToast('Memories saved', 'success');
-  }
-
-  function applyMemoriesContent(markdown) {
-    if (!elements.memoriesEditor) return;
-    elements.memoriesEditor.value = markdown;
-    elements.memoriesEditor.scrollTop = 0;
-    elements.memoriesSaveBtn?.removeAttribute('data-dirty');
-  }
 
   function loadRules() {
     sendMessage({ type: 'command', data: { command: 'listRules' } });
@@ -1728,17 +1618,10 @@ let pendingGuidelinesAppend = '';
     elements.guidelinesEditor.value = text;
     elements.guidelinesEditor.scrollTop = 0;
     elements.guidelinesSaveBtn?.classList.remove('pulse');
-    applyPendingGuidelinesAppend();
   }
 
-  function applyPendingGuidelinesAppend() {
-    if (!pendingGuidelinesAppend || !elements.guidelinesEditor) return;
-    elements.guidelinesEditor.value = (elements.guidelinesEditor.value || '') + pendingGuidelinesAppend;
-    pendingGuidelinesAppend = '';
-    elements.guidelinesSaveBtn?.classList.add('pulse');
-  }
 
-  // Selection helpers
+  // Selection helpers - just update button state
   function updateSelectionContext(selection) {
     currentSelectionContext = selection;
     const hasSelection = !!selection;
@@ -1746,118 +1629,6 @@ let pendingGuidelinesAppend = '';
       elements.selectionBtn.disabled = !hasSelection;
       elements.selectionBtn.classList.toggle('disabled', !hasSelection);
     }
-    if (hasSelection) {
-      updateSelectionPreview();
-    } else {
-      hideSelectionTooltip();
-    }
-  }
-
-  function updateSelectionPreview() {
-    if (!elements.selectionPreview || !currentSelectionContext) return;
-    const text = currentSelectionContext.text || '';
-    if (!text.trim()) {
-      if (elements.selectionLineNumbers) elements.selectionLineNumbers.innerHTML = '';
-      if (elements.selectionCodeContent) elements.selectionCodeContent.textContent = 'No selected text available.';
-      return;
-    }
-
-    // Get line numbers from selection context
-    const startLine = currentSelectionContext.startLine || 1;
-    const lines = text.split('\n');
-    const maxLines = 20; // Limit display to 20 lines
-    const displayLines = lines.slice(0, maxLines);
-    const hasMore = lines.length > maxLines;
-
-    // Generate line numbers
-    let lineNumbersHtml = '';
-    let codeContentHtml = '';
-    
-    displayLines.forEach((line, index) => {
-      const lineNum = startLine + index;
-      lineNumbersHtml += `<div class="selection-line-number">${lineNum}</div>`;
-      
-      // Basic syntax highlighting for common patterns
-      let highlightedLine = escapeHtml(line);
-      
-      // Highlight strings
-      highlightedLine = highlightedLine.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, '<span class="code-string">$&</span>');
-      
-      // Highlight numbers
-      highlightedLine = highlightedLine.replace(/\b(\d+\.?\d*)\b/g, '<span class="code-number">$1</span>');
-      
-      // Highlight keywords (basic set)
-      const keywords = ['function', 'const', 'let', 'var', 'if', 'else', 'for', 'while', 'return', 'import', 'export', 'class', 'extends', 'async', 'await', 'try', 'catch', 'finally', 'throw', 'new', 'this', 'super', 'static', 'public', 'private', 'protected', 'interface', 'type', 'enum', 'namespace', 'module', 'declare', 'abstract', 'readonly', 'void', 'null', 'undefined', 'true', 'false'];
-      keywords.forEach(keyword => {
-        const regex = new RegExp(`\\b${keyword}\\b`, 'g');
-        highlightedLine = highlightedLine.replace(regex, `<span class="code-keyword">${keyword}</span>`);
-      });
-      
-      // Highlight comments
-      highlightedLine = highlightedLine.replace(/(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, '<span class="code-comment">$1</span>');
-      
-      codeContentHtml += `<div class="selection-code-line">${highlightedLine || ' '}</div>`;
-    });
-
-    if (hasMore) {
-      lineNumbersHtml += `<div class="selection-line-number">...</div>`;
-      codeContentHtml += `<div class="selection-code-line code-more">... ${lines.length - maxLines} more lines</div>`;
-    }
-
-    if (elements.selectionLineNumbers) {
-      elements.selectionLineNumbers.innerHTML = lineNumbersHtml;
-    }
-    if (elements.selectionCodeContent) {
-      elements.selectionCodeContent.innerHTML = codeContentHtml;
-    }
-  }
-
-  function showSelectionTooltip() {
-    if (!currentSelectionContext || !elements.selectionTooltip || !elements.selectionBtn) return;
-    updateSelectionPreview();
-    
-    // Position above the input area (footer chat panel)
-    const inputArea = document.querySelector('.input-area');
-    if (inputArea) {
-      const rect = inputArea.getBoundingClientRect();
-      elements.selectionTooltip.style.bottom = `${window.innerHeight - rect.top + 8}px`;
-      elements.selectionTooltip.style.left = `${rect.left}px`;
-      elements.selectionTooltip.style.right = `${window.innerWidth - rect.right}px`;
-      elements.selectionTooltip.style.top = 'auto';
-      elements.selectionTooltip.style.width = `${rect.width}px`;
-      elements.selectionTooltip.style.maxWidth = 'none';
-    } else {
-      // Fallback to button position
-      const rect = elements.selectionBtn.getBoundingClientRect();
-      elements.selectionTooltip.style.top = `${rect.bottom + 8 + window.scrollY}px`;
-      elements.selectionTooltip.style.left = `${rect.left + window.scrollX}px`;
-    }
-    
-    elements.selectionTooltip.classList.add('show');
-    elements.selectionTooltip.setAttribute('aria-hidden', 'false');
-  }
-
-  function hideSelectionTooltip() {
-    elements.selectionTooltip?.classList.remove('show');
-    elements.selectionTooltip?.setAttribute('aria-hidden', 'true');
-  }
-
-  function moveSelectionToGuidelines() {
-    if (!currentSelectionContext?.text) return;
-    const addition = `\n\n## Context from ${currentSelectionContext.relativePath}\n${currentSelectionContext.text.trim()}\n`;
-    pendingGuidelinesAppend = addition;
-    if (openPanelId !== 'rules') {
-      openPanel('rules');
-    } else {
-      applyPendingGuidelinesAppend();
-    }
-  }
-
-  function insertSelectionIntoInput() {
-    if (!currentSelectionContext?.text || !elements.messageInput) return;
-    const block = `\n> ${currentSelectionContext.text.trim().replace(/\n/g, '\n> ')}\n`;
-    insertMentionToken(block);
-    hideSelectionTooltip();
   }
 
   function escapeHtml(text) {

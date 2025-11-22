@@ -501,36 +501,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         <!-- Workspace Panels & Tooltips -->
         <div class="panel-overlay" id="panel-overlay" aria-hidden="true"></div>
 
-        <section class="workspace-panel" id="memories-panel" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="memories-panel-title" tabindex="-1">
-          <div class="panel-header">
-            <div class="panel-header-text">
-              <p class="panel-eyebrow">Augment</p>
-              <div class="panel-title-group">
-                <h2 id="memories-panel-title">Memories</h2>
-                <span class="panel-dot">•</span>
-                <span class="panel-subtitle">Project knowledge graph</span>
-              </div>
-              <div class="panel-breadcrumbs" id="memories-breadcrumbs">Workspace · .denix · memories.md</div>
-            </div>
-            <div class="panel-header-actions">
-              <button class="toolbar-btn ghost" id="memories-open-file" aria-label="Open memories file in editor">Open file</button>
-              <button class="panel-close-btn" data-close-panel="memories" aria-label="Close memories panel">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                  <path d="M4 4l8 8M12 4l-8 8"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div class="panel-toolbar">
-            <button class="toolbar-btn" id="memories-toolbar-guidelines">User Guidelines</button>
-            <button class="toolbar-btn" id="memories-toolbar-rules">Rules</button>
-            <button class="toolbar-btn primary" id="memories-save">Save</button>
-          </div>
-          <div class="panel-body">
-            <textarea id="memories-editor" class="panel-editor" spellcheck="false" aria-label="Memories markdown editor"></textarea>
-          </div>
-        </section>
-
         <section class="workspace-panel" id="rules-panel" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="rules-panel-title" tabindex="-1">
           <div class="panel-header">
             <div class="panel-header-text">
@@ -567,18 +537,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             </div>
           </div>
         </section>
-
-        <div class="selection-tooltip" id="selection-tooltip" role="dialog" aria-hidden="true" tabindex="-1">
-          <div class="selection-tooltip-header">
-            <span>Selected text</span>
-          </div>
-          <div class="selection-preview" id="selection-preview" aria-live="polite">
-            <div class="selection-code-container">
-              <div class="selection-line-numbers" id="selection-line-numbers"></div>
-              <div class="selection-code-content" id="selection-code-content"></div>
-            </div>
-          </div>
-        </div>
 
         <!-- Image Preview Modal -->
         <div class="image-modal" id="image-modal">
@@ -1554,7 +1512,30 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   // Public methods for commands
   public async openMemories(): Promise<void> {
-    await this._memoriesManager.openMemoriesDocument();
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage('No workspace folder found');
+      return;
+    }
+
+    const memoriesUri = vscode.Uri.joinPath(workspaceFolder.uri, '.denix', 'memories.md');
+    
+    // Ensure file exists
+    try {
+      await vscode.workspace.fs.stat(memoriesUri);
+    } catch {
+      // Create file if it doesn't exist
+      const dirUri = vscode.Uri.joinPath(workspaceFolder.uri, '.denix');
+      await vscode.workspace.fs.createDirectory(dirUri);
+      await vscode.workspace.fs.writeFile(memoriesUri, Buffer.from('# Denix AI Memories\n\n', 'utf8'));
+    }
+
+    // Open with custom editor
+    await vscode.commands.executeCommand(
+      'vscode.openWith',
+      memoriesUri,
+      'denix-ai.memoriesEditor'
+    );
   }
 
   public async openSettings(): Promise<void> {

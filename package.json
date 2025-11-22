@@ -33,6 +33,18 @@
         }
       ]
     },
+    "customEditors": [
+      {
+        "viewType": "denix-ai.memoriesEditor",
+        "displayName": "Denix Memories Editor",
+        "selector": [
+          {
+            "filenamePattern": "**/.denix/memories.md"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "commands": [
       {
         "command": "denix-ai.newThread",
