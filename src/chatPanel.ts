@@ -421,7 +421,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                     <path d="M6 4h9l3 3v13H6z"/>
                     <path d="M15 4v3h3"/>
                     <path d="M9 10h6M9 14h4"/>
-                    <path d="M4 9v11h11"/>
                   </svg>
                 </button>
                 <button class="icon-btn" id="selection-btn" aria-label="Show selected text actions" aria-haspopup="true" aria-expanded="false" title="Selected Text">
@@ -501,42 +500,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         <!-- Workspace Panels & Tooltips -->
         <div class="panel-overlay" id="panel-overlay" aria-hidden="true"></div>
 
-        <section class="workspace-panel" id="rules-panel" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="rules-panel-title" tabindex="-1">
-          <div class="panel-header">
-            <div class="panel-header-text">
-              <p class="panel-eyebrow">Augment</p>
-              <h2 id="rules-panel-title">Rules &amp; User Guidelines</h2>
-              <div class="panel-breadcrumbs">Workspace · .denix · rules</div>
-            </div>
-            <div class="panel-header-actions">
-              <button class="panel-close-btn" data-close-panel="rules" aria-label="Close rules and guidelines panel">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                  <path d="M4 4l8 8M12 4l-8 8"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div class="panel-body rules-panel-body">
-            <div class="rules-column">
-              <div class="rules-toolbar">
-                <button class="toolbar-btn primary" id="create-rule-btn">Create new rule file</button>
-                <button class="toolbar-btn ghost" id="import-rule-btn">Import rules</button>
-              </div>
-              <div class="rules-dropzone" id="rules-dropzone" aria-label="Drop markdown files to import rules">
-                <p>Drop .md files to import rules</p>
-              </div>
-              <div class="rules-list" id="rules-list" aria-label="Existing rule files"></div>
-            </div>
-            <div class="guidelines-column">
-              <label for="guidelines-editor" class="panel-eyebrow">User Guidelines</label>
-              <textarea id="guidelines-editor" class="panel-editor" spellcheck="false" aria-label="User guidelines editor"></textarea>
-              <div class="guidelines-actions">
-                <button class="toolbar-btn ghost" id="guidelines-reset">Reset</button>
-                <button class="toolbar-btn primary" id="guidelines-save">Save guidelines</button>
-              </div>
-            </div>
-          </div>
-        </section>
 
         <!-- Image Preview Modal -->
         <div class="image-modal" id="image-modal">

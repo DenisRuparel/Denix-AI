@@ -88,6 +88,20 @@ export class RulesManager {
     return '';
   }
 
+  public async deleteRuleFile(name: string): Promise<void> {
+    const rules = await this.listRuleFiles();
+    const rule = rules.find(r => r.name === name);
+    if (!rule) {
+      throw new Error(`Rule file "${name}" not found`);
+    }
+
+    try {
+      await vscode.workspace.fs.delete(vscode.Uri.file(rule.path));
+    } catch (error) {
+      throw new Error(`Failed to delete rule file: ${error}`);
+    }
+  }
+
   private async readFile(uri: vscode.Uri): Promise<string> {
     const data = await vscode.workspace.fs.readFile(uri);
     return Buffer.from(data).toString('utf8');

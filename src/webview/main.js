@@ -49,15 +49,6 @@
     memoriesBtn: document.getElementById('memories-btn'),
     rulesBtn: document.getElementById('rules-btn'),
     selectionBtn: document.getElementById('selection-btn'),
-    panelOverlay: document.getElementById('panel-overlay'),
-    rulesPanel: document.getElementById('rules-panel'),
-    rulesList: document.getElementById('rules-list'),
-    rulesDropzone: document.getElementById('rules-dropzone'),
-    createRuleBtn: document.getElementById('create-rule-btn'),
-    importRuleBtn: document.getElementById('import-rule-btn'),
-    guidelinesEditor: document.getElementById('guidelines-editor'),
-    guidelinesSaveBtn: document.getElementById('guidelines-save'),
-    guidelinesResetBtn: document.getElementById('guidelines-reset'),
     autoBtn: document.getElementById('auto-btn'),
     askQuestionBtn: document.getElementById('ask-question-btn'),
     enhanceBtn: document.getElementById('enhance-btn'),
@@ -133,9 +124,7 @@
   let mentionSearchTerm = '';
 
   // Panel state
-  let openPanelId = null;
   let currentSelectionContext = null;
-  let currentRules = [];
 
   // Initialize
   function init() {
@@ -247,9 +236,6 @@
       if (e.key === 'Escape' && elements.mentionPicker?.classList.contains('show')) {
         hideMentionPicker(true);
       }
-      if (e.key === 'Escape' && openPanelId) {
-        closePanel(openPanelId);
-      }
     });
 
     elements.memoriesBtn?.addEventListener('click', () => {
@@ -257,7 +243,7 @@
     });
 
     elements.rulesBtn?.addEventListener('click', () => {
-      togglePanel('rules');
+      sendMessage({ type: 'command', data: { command: 'openSettings' } });
     });
 
     // Show tooltip on hover, hide when mouse leaves button or tooltip
@@ -266,49 +252,6 @@
       sendMessage({ type: 'command', data: { command: 'toggleSelection' } });
     });
 
-    // Panel overlay + close buttons
-    elements.panelOverlay?.addEventListener('click', () => {
-      if (openPanelId) {
-        closePanel(openPanelId);
-      }
-    });
-
-    document.querySelectorAll('.panel-close-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const panel = btn.getAttribute('data-close-panel');
-        if (panel) {
-          closePanel(panel);
-        }
-      });
-    });
-
-
-    // Rules panel events
-    elements.createRuleBtn?.addEventListener('click', () => promptCreateRule());
-    elements.importRuleBtn?.addEventListener('click', () => {
-      sendMessage({ type: 'command', data: { command: 'importRules' } });
-    });
-    elements.guidelinesSaveBtn?.addEventListener('click', () => saveGuidelines());
-    elements.guidelinesResetBtn?.addEventListener('click', () => loadGuidelines());
-    elements.guidelinesEditor?.addEventListener('input', () => {
-      elements.guidelinesSaveBtn?.classList.add('pulse');
-    });
-
-    elements.rulesDropzone?.addEventListener('dragover', (event) => {
-      event.preventDefault();
-      elements.rulesDropzone.classList.add('dragging');
-    });
-    elements.rulesDropzone?.addEventListener('dragleave', () => {
-      elements.rulesDropzone.classList.remove('dragging');
-    });
-    elements.rulesDropzone?.addEventListener('drop', (event) => {
-      event.preventDefault();
-      elements.rulesDropzone.classList.remove('dragging');
-      const files = [...event.dataTransfer.files].map(file => file.path);
-      if (files.length) {
-        sendMessage({ type: 'command', data: { command: 'importRules', payload: { files } } });
-      }
-    });
 
 
     // Bottom row actions
@@ -437,12 +380,6 @@
         break;
       case 'mentionItems':
         renderMentionItems(message.data || []);
-        break;
-      case 'guidelinesContent':
-        applyGuidelinesContent(message.data || '');
-        break;
-      case 'rulesList':
-        renderRulesList(message.data || []);
         break;
       default:
         console.log('Unknown message type:', message.type);
@@ -1413,7 +1350,6 @@
         break;
       case 'panel':
         hideMentionPicker(true);
-        togglePanel(item.panel);
         break;
       case 'selection':
         insertSelectionIntoInput();
@@ -1518,107 +1454,6 @@
     return icons[iconType] || icons.file;
   }
 
-  // Panel helpers
-  function togglePanel(panelId) {
-    if (openPanelId === panelId) {
-      closePanel(panelId);
-    } else {
-      openPanel(panelId);
-    }
-  }
-
-  function openPanel(panelId) {
-    const panelEl = elements.rulesPanel;
-    if (!panelEl) return;
-    openPanelId = panelId;
-    panelEl.classList.add('open');
-    panelEl.setAttribute('aria-hidden', 'false');
-    elements.panelOverlay?.classList.add('show');
-    panelEl.focus();
-
-    if (panelId === 'rules') {
-      loadRules();
-      loadGuidelines();
-    }
-  }
-
-  function closePanel(panelId) {
-    const panelEl = elements.rulesPanel;
-    if (!panelEl) return;
-    panelEl.classList.remove('open');
-    panelEl.setAttribute('aria-hidden', 'true');
-    if (openPanelId === panelId) {
-      openPanelId = null;
-    }
-    if (!openPanelId) {
-      elements.panelOverlay?.classList.remove('show');
-    }
-  }
-
-
-  function loadRules() {
-    sendMessage({ type: 'command', data: { command: 'listRules' } });
-  }
-
-  function renderRulesList(rules) {
-    currentRules = rules;
-    if (!elements.rulesList) return;
-    if (!rules.length) {
-      elements.rulesList.innerHTML = '<div class="rules-empty">No rule files yet. Create one to define constraints.</div>';
-      return;
-    }
-    const items = rules.map(rule => `
-      <article class="rule-card">
-        <div>
-          <h4>${escapeHtml(rule.name)}</h4>
-          <p>${escapeHtml(rule.path || '')}</p>
-        </div>
-        <div class="rule-card-actions">
-          <button class="toolbar-btn ghost" data-open-rule="${escapeHtml(rule.name)}">Open</button>
-        </div>
-      </article>
-    `).join('');
-    elements.rulesList.innerHTML = items;
-    elements.rulesList.querySelectorAll('[data-open-rule]').forEach(button => {
-      button.addEventListener('click', () => {
-        const name = button.getAttribute('data-open-rule');
-        const rule = currentRules.find(r => r.name === name);
-        if (rule) {
-          sendMessage({ type: 'command', data: { command: 'openRule', payload: { path: rule.path } } });
-        }
-      });
-    });
-  }
-
-  function promptCreateRule() {
-    const name = window.prompt('Name for the new rule file (e.g. branch-guardrails)');
-    if (!name) return;
-    sendMessage({ type: 'command', data: { command: 'createRule', payload: { name } } });
-  }
-
-  function loadGuidelines() {
-    sendMessage({ type: 'command', data: { command: 'loadGuidelines' } });
-  }
-
-  function saveGuidelines() {
-    if (!elements.guidelinesEditor) return;
-    sendMessage({
-      type: 'command',
-      data: {
-        command: 'saveGuidelines',
-        payload: { content: elements.guidelinesEditor.value }
-      }
-    });
-    elements.guidelinesSaveBtn?.classList.remove('pulse');
-    showToast('Guidelines saved', 'success');
-  }
-
-  function applyGuidelinesContent(text) {
-    if (!elements.guidelinesEditor) return;
-    elements.guidelinesEditor.value = text;
-    elements.guidelinesEditor.scrollTop = 0;
-    elements.guidelinesSaveBtn?.classList.remove('pulse');
-  }
 
 
   // Selection helpers - just update button state
