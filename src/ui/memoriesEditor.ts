@@ -1,16 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { RulesManager } from '../features/rules';
-import { GuidelinesManager } from '../features/guidelines';
-
 export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
   public static readonly viewType = 'denix-ai.memoriesEditor';
 
   constructor(
-    private readonly _extensionUri: vscode.Uri,
-    private readonly _rulesManager: RulesManager,
-    private readonly _guidelinesManager: GuidelinesManager
+    private readonly _extensionUri: vscode.Uri
   ) {}
 
   public async resolveCustomTextEditor(
@@ -53,12 +48,6 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
       switch (message.type) {
         case 'save':
           this._updateDocument(document, message.content);
-          break;
-        case 'openGuidelines':
-          await this._openGuidelines();
-          break;
-        case 'openRules':
-          await this._openRules();
           break;
         case 'openFile':
           await this._openFileInEditor(document.uri);
@@ -211,23 +200,6 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
       <body>
         <div class="memories-editor-container">
           <div class="memories-toolbar">
-            <div class="memories-toolbar-left">
-              <button class="memories-toolbar-btn" id="open-guidelines-btn">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M2 5L8 2L14 5L14 11L8 14L2 11Z"/>
-                  <path d="M8 2V14M2 5L8 8L14 5M2 11L8 8L14 11"/>
-                </svg>
-                <span>→ User Guidelines</span>
-              </button>
-              <button class="memories-toolbar-btn" id="open-rules-btn">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M6 4h9l3 3v13H6z"/>
-                  <path d="M15 4v3h3"/>
-                  <path d="M9 10h6M9 14h4"/>
-                </svg>
-                <span>→ Rules</span>
-              </button>
-            </div>
             <div class="memories-toolbar-right">
               <button class="memories-toolbar-btn" id="open-file-btn" style="background: transparent; border: none; padding: 4px 8px;">
                 <svg class="memories-filename-icon" viewBox="0 0 16 16" fill="currentColor" style="width: 16px; height: 16px;">
@@ -244,8 +216,6 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
         <script nonce="${nonce}">
           const vscode = acquireVsCodeApi();
           const textarea = document.getElementById('memories-textarea');
-          const openGuidelinesBtn = document.getElementById('open-guidelines-btn');
-          const openRulesBtn = document.getElementById('open-rules-btn');
           const openFileBtn = document.getElementById('open-file-btn');
           
           let saveTimeout = null;
@@ -269,15 +239,6 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
             if (message.type === 'update') {
               textarea.value = message.content;
             }
-          });
-          
-          // Toolbar buttons
-          openGuidelinesBtn.addEventListener('click', () => {
-            vscode.postMessage({ type: 'openGuidelines' });
-          });
-          
-          openRulesBtn.addEventListener('click', () => {
-            vscode.postMessage({ type: 'openRules' });
           });
           
           openFileBtn.addEventListener('click', () => {
@@ -326,16 +287,6 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
       content
     );
     vscode.workspace.applyEdit(edit);
-  }
-
-  private async _openGuidelines(): Promise<void> {
-    // Open guidelines in rules panel or editor
-    await vscode.commands.executeCommand('denix-ai.openSettings');
-  }
-
-  private async _openRules(): Promise<void> {
-    // Open rules panel
-    await vscode.commands.executeCommand('denix-ai.openSettings');
   }
 
   private async _openFileInEditor(uri: vscode.Uri): Promise<void> {

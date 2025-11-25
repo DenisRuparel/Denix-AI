@@ -143,7 +143,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       currentFile: undefined
     };
 
-    this._settingsPanel = new SettingsPanel(this._extensionUri, this._rulesManager, this._guidelinesManager);
+    this._settingsPanel = new SettingsPanel(this._extensionUri);
 
     // Load persisted state
     this._loadState();
@@ -416,11 +416,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                     <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
                   </svg>
                 </button>
-                <button class="icon-btn" id="rules-btn" aria-label="Open rules and user guidelines" aria-haspopup="true" aria-expanded="false" title="Rules and Guidelines">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M6 4h9l3 3v13H6z"/>
-                    <path d="M15 4v3h3"/>
-                    <path d="M9 10h6M9 14h4"/>
+                <button class="icon-btn" id="ask-question-btn" aria-label="Ask Question" title="Ask Question">
+                  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="8" cy="8" r="6"/>
+                    <path d="M8 5V8M8 11H8.01"/>
                   </svg>
                 </button>
                 <button class="icon-btn" id="selection-btn" aria-label="Show selected text actions" aria-haspopup="true" aria-expanded="false" title="Selected Text">
@@ -451,12 +450,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                   <span class="toggle-indicator">◉</span>
                   <span>Auto</span>
                 </button>
-                <button class="icon-btn" id="ask-question-btn" aria-label="Ask Question" title="Ask Question">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                    <path d="M8 5V8M8 11H8.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  </svg>
-                </button>
                 <button class="icon-btn" id="enhance-btn" aria-label="Enhance Prompt" title="Enhance Prompt">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M8 1L10 6L15 8L10 10L8 15L6 10L1 8L6 6L8 1Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
@@ -474,12 +467,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 <button class="icon-btn" id="attach-btn" aria-label="Attach file" title="Attach file">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M10.5 2L14 5.5L10.5 9M5.5 9L2 5.5L5.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                  </svg>
-                </button>
-                <button class="icon-btn" id="settings-btn" aria-label="Settings" title="Settings">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <circle cx="8" cy="8" r="2" fill="currentColor"/>
-                    <path d="M8 1V3M8 13V15M15 8H13M3 8H1M12.364 3.636L10.95 5.05M5.05 10.95L3.636 12.364M12.364 12.364L10.95 10.95M5.05 5.05L3.636 3.636" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                   </svg>
                 </button>
                 <button class="stop-btn hidden" id="stop-btn" aria-label="Stop generation" title="Stop generation">
@@ -1516,8 +1503,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const selection = this._selectionWatcher.getSelection();
     const context = selection ? `File: ${selection.fileName}\nLinescls: ${selection.startLine}-${selection.endLine}\n\n${selection.text}` : '';
     
-    const quickAsk = new QuickAskPanel(this._extensionUri, async (prompt: string) => {
-      const fullPrompt = this._quickQuestionService.buildPrompt('', prompt);
+    const quickAsk = new QuickAskPanel(this._extensionUri, async (prompt: string, templateId: string) => {
+      const fullPrompt = this._quickQuestionService.buildPrompt(templateId, prompt);
       await this._handleUserMessage({ content: fullPrompt, attachments: [] });
     });
     
@@ -1530,13 +1517,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
 
     // Get current prompt from webview
-    const currentPrompt = await new Promise<string>((resolve) => {
+    const currentPrompt = await new Promise<string>((resolve, reject) => {
+      let timeout: NodeJS.Timeout;
       const listener = this._view!.webview.onDidReceiveMessage((message) => {
         if (message.type === 'currentPrompt') {
+          clearTimeout(timeout);
           listener.dispose();
           resolve(message.data);
         }
       });
+      timeout = setTimeout(() => {
+        listener.dispose();
+        reject(new Error('Timeout waiting for current prompt'));
+      }, 5000);
+
       this._view!.webview.postMessage({ type: 'getCurrentPrompt' });
     });
 

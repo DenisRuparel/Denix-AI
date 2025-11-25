@@ -1689,9 +1689,8 @@ body {
   opacity: 0.6;
 }
 
-/* Attachment and Settings Buttons */
-#attach-btn,
-#settings-btn {
+/* Attachment Button */
+#attach-btn {
   width: 28px;
   height: 28px;
 }

@@ -3,11 +3,11 @@ import { QuickQuestionTemplate } from '../features/askQuestion';
 
 export class QuickAskPanel {
   private panel: vscode.WebviewPanel | null = null;
-  private onSendCallback?: (prompt: string) => void;
+  private onSendCallback?: (prompt: string, templateId: string) => void;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    onSend: (prompt: string) => void
+    onSend: (prompt: string, templateId: string) => void
   ) {
     this.onSendCallback = onSend;
   }
@@ -32,7 +32,7 @@ export class QuickAskPanel {
     this.panel.webview.html = this.renderHtml(templates, context);
     this.panel.webview.onDidReceiveMessage(message => {
       if (message.type === 'send') {
-        this.onSendCallback?.(message.prompt);
+        this.onSendCallback?.(message.prompt, message.templateId || '');
         this.panel?.dispose();
       } else if (message.type === 'dispose') {
         this.panel?.dispose();
@@ -167,7 +167,7 @@ export class QuickAskPanel {
       const custom = document.getElementById('custom-prompt').value.trim();
       const prompt = custom || (selectedTemplate ? getTemplatePrompt(selectedTemplate) : '');
       if (prompt) {
-        vscode.postMessage({ type: 'send', prompt });
+        vscode.postMessage({ type: 'send', prompt, templateId: selectedTemplate || '' });
       }
     }
     

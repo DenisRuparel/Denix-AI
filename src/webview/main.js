@@ -47,14 +47,12 @@
     mentionSearchInput: document.getElementById('mention-search-input'),
     mentionSuggestions: document.getElementById('mention-suggestions'),
     memoriesBtn: document.getElementById('memories-btn'),
-    rulesBtn: document.getElementById('rules-btn'),
     selectionBtn: document.getElementById('selection-btn'),
     autoBtn: document.getElementById('auto-btn'),
     askQuestionBtn: document.getElementById('ask-question-btn'),
     enhanceBtn: document.getElementById('enhance-btn'),
     modelBtn: document.getElementById('model-btn'),
     attachBtn: document.getElementById('attach-btn'),
-    settingsBtn: document.getElementById('settings-btn'),
     sendBtn: document.getElementById('send-btn'),
     stopBtn: document.getElementById('stop-btn'),
     imageModal: document.getElementById('image-modal'),
@@ -242,10 +240,6 @@
       sendMessage({ type: 'command', data: { command: 'openMemories' } });
     });
 
-    elements.rulesBtn?.addEventListener('click', () => {
-      sendMessage({ type: 'command', data: { command: 'openSettings' } });
-    });
-
     // Show tooltip on hover, hide when mouse leaves button or tooltip
     // Selection button - no tooltip, just toggle selection context
     elements.selectionBtn?.addEventListener('click', () => {
@@ -273,10 +267,6 @@
 
     elements.attachBtn?.addEventListener('click', () => {
       sendMessage({ type: 'fileAttach', data: {} });
-    });
-
-    elements.settingsBtn?.addEventListener('click', () => {
-      showSettings();
     });
 
     elements.sendBtn?.addEventListener('click', () => {
@@ -833,13 +823,6 @@
     showToast('All attachments cleared', 'success');
   }
 
-
-  // Show settings
-  function showSettings() {
-    // Placeholder - would show settings menu
-    console.log('Show settings');
-    showToast('Settings', 'info');
-  }
 
   // Show typing indicator
   function showTypingIndicator(active) {

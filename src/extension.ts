@@ -51,9 +51,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Register custom editor for memories
   const memoriesEditorProvider = new MemoriesEditorProvider(
-    context.extensionUri,
-    rulesManager,
-    guidelinesManager
+    context.extensionUri
   );
   
   context.subscriptions.push(
