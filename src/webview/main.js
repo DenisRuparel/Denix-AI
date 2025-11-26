@@ -44,6 +44,7 @@
     messageInput: document.getElementById('message-input'),
     mentionBtn: document.getElementById('mention-btn'),
     mentionPicker: document.getElementById('mention-picker'),
+    mentionPickerOverlay: document.getElementById('mention-picker-overlay'),
     mentionSearchInput: document.getElementById('mention-search-input'),
     mentionSuggestions: document.getElementById('mention-suggestions'),
     memoriesBtn: document.getElementById('memories-btn'),
@@ -123,6 +124,8 @@
 
   // Panel state
   let currentSelectionContext = null;
+  let selectionTooltipEl = null;
+  let selectionHoverTimer = null;
 
   // Initialize
   function init() {
@@ -204,7 +207,19 @@
     // Top row quick actions
     elements.mentionBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleMentionPicker();
+      e.preventDefault();
+      // Immediate response
+      if (elements.mentionPicker?.classList.contains('show')) {
+        hideMentionPicker(true);
+      } else {
+        showMentionPicker(true);
+      }
+    });
+    
+    // Make mention button more responsive with mousedown
+    elements.mentionBtn?.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
     });
 
     elements.mentionBtn?.addEventListener('keydown', (e) => {
@@ -223,10 +238,19 @@
       handleMentionKeydown(e);
     });
 
-    // Close mention picker when clicking outside
-    document.addEventListener('click', (e) => {
-      if (elements.mentionPicker && !elements.mentionPicker.contains(e.target) && e.target !== elements.mentionBtn) {
+    // Close mention picker when clicking outside or on overlay
+    if (elements.mentionPickerOverlay) {
+      elements.mentionPickerOverlay.addEventListener('click', () => {
         hideMentionPicker();
+      });
+    }
+    
+    document.addEventListener('click', (e) => {
+      if (elements.mentionPicker && !elements.mentionPicker.contains(e.target) && e.target !== elements.mentionBtn && e.target !== elements.mentionPickerOverlay) {
+        hideMentionPicker();
+      }
+      if (selectionTooltipEl && selectionTooltipEl !== e.target && !selectionTooltipEl.contains(e.target) && e.target !== elements.selectionBtn) {
+        hideSelectionTooltip();
       }
     });
 
@@ -240,9 +264,33 @@
       sendMessage({ type: 'command', data: { command: 'openMemories' } });
     });
 
-    // Show tooltip on hover, hide when mouse leaves button or tooltip
-    // Selection button - no tooltip, just toggle selection context
+    window.addEventListener('scroll', hideSelectionTooltip, true);
+    window.addEventListener('resize', hideSelectionTooltip);
+
+    // Selection button hover tooltip
+    elements.selectionBtn?.addEventListener('mouseenter', () => {
+      if (selectionHoverTimer) {
+        clearTimeout(selectionHoverTimer);
+      }
+      selectionHoverTimer = setTimeout(() => {
+        if (currentSelectionContext) {
+          showSelectionTooltip(currentSelectionContext);
+        } else {
+          sendMessage({ type: 'getSelection' });
+        }
+      }, 250);
+    });
+
+    elements.selectionBtn?.addEventListener('mouseleave', () => {
+      if (selectionHoverTimer) {
+        clearTimeout(selectionHoverTimer);
+        selectionHoverTimer = null;
+      }
+      hideSelectionTooltip();
+    });
+
     elements.selectionBtn?.addEventListener('click', () => {
+      hideSelectionTooltip();
       sendMessage({ type: 'command', data: { command: 'toggleSelection' } });
     });
 
@@ -371,9 +419,61 @@
       case 'mentionItems':
         renderMentionItems(message.data || []);
         break;
+      case 'selectionData':
+        currentSelectionContext = message.data || null;
+        if (elements.selectionBtn?.matches(':hover') && currentSelectionContext) {
+          showSelectionTooltip(currentSelectionContext);
+        }
+        break;
+      case 'selectionData':
+        showSelectionTooltip(message.data);
+        break;
       default:
         console.log('Unknown message type:', message.type);
     }
+  }
+  
+  // Show selection tooltip
+  function showSelectionTooltip(selection) {
+    if (!selection || !selection.text) return;
+    
+    const btn = elements.selectionBtn;
+    if (!btn) return;
+    
+    // Remove existing tooltip
+    const existing = document.querySelector('.selection-hover-tooltip');
+    if (existing) existing.remove();
+    
+    const tooltip = document.createElement('div');
+    tooltip.className = 'selection-hover-tooltip';
+    
+    const preview = selection.text.length > 200 
+      ? selection.text.substring(0, 200) + '...' 
+      : selection.text;
+    
+    tooltip.innerHTML = `
+      <div class="selection-tooltip-header">
+        ${selection.fileName || 'Selected Text'}${selection.startLine ? `:${selection.startLine}-${selection.endLine}` : ''}
+      </div>
+      <div class="selection-tooltip-preview">${escapeHtml(preview)}</div>
+    `;
+    
+    document.body.appendChild(tooltip);
+    
+    // Position tooltip
+    const rect = btn.getBoundingClientRect();
+    tooltip.style.top = `${rect.top - tooltip.offsetHeight - 8}px`;
+    tooltip.style.left = `${rect.left + rect.width / 2 - tooltip.offsetWidth / 2}px`;
+    
+    // Cleanup on mouse leave
+    const cleanup = () => {
+      if (tooltip && tooltip.parentNode) {
+        tooltip.remove();
+      }
+    };
+    
+    btn.addEventListener('mouseleave', cleanup, { once: true });
+    tooltip.addEventListener('mouseleave', cleanup, { once: true });
   }
 
   // Update state and UI
@@ -803,10 +903,10 @@
   function updateGeneratingUI() {
     if (elements.stopBtn && elements.sendBtn) {
       if (state.isGenerating) {
-        elements.stopBtn.classList.remove('hidden');
+        elements.stopBtn.classList.add('visible');
         elements.sendBtn.style.display = 'none';
       } else {
-        elements.stopBtn.classList.add('hidden');
+        elements.stopBtn.classList.remove('visible');
         elements.sendBtn.style.display = 'flex';
       }
     }
@@ -1235,6 +1335,9 @@
 
   function showMentionPicker(focusSearch = false) {
     if (!elements.mentionPicker || !elements.mentionBtn) return;
+    if (elements.mentionPickerOverlay) {
+      elements.mentionPickerOverlay.classList.add('show');
+    }
     elements.mentionPicker.classList.add('show');
     elements.mentionPicker.setAttribute('aria-hidden', 'false');
     elements.mentionBtn.classList.add('active');
@@ -1253,6 +1356,9 @@
 
   function hideMentionPicker(returnFocus = false) {
     if (!elements.mentionPicker || !elements.mentionBtn) return;
+    if (elements.mentionPickerOverlay) {
+      elements.mentionPickerOverlay.classList.remove('show');
+    }
     elements.mentionPicker.classList.remove('show');
     elements.mentionPicker.setAttribute('aria-hidden', 'true');
     elements.mentionBtn.classList.remove('active');
@@ -1402,12 +1508,16 @@
       grouped[group].forEach((item, index) => {
         const globalIndex = mentionItems.indexOf(item);
         const icon = getMentionIcon(item.icon);
+        const hasArrow = item.action === 'command' || item.action === 'panel' || item.hasSubmenu;
         html += `
           <button class="mention-item" role="option" data-index="${globalIndex}">
             <div class="mention-item-icon">${icon}</div>
             <div class="mention-item-content">
-              <div class="mention-item-label">${escapeHtml(item.label)}</div>
-              <div class="mention-item-path">${escapeHtml(item.description || '')}</div>
+              <div class="mention-item-label-wrapper">
+                <div class="mention-item-label">${escapeHtml(item.label)}</div>
+                ${item.description ? `<div class="mention-item-path">${escapeHtml(item.description)}</div>` : ''}
+              </div>
+              ${hasArrow ? `<div class="mention-item-arrow"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4l4 4-4 4"/></svg></div>` : ''}
             </div>
           </button>
         `;
@@ -1426,13 +1536,36 @@
   }
 
   function getMentionIcon(iconType) {
+    const mediaUri = window.mediaUri || '';
+    
+    // Try to use PNG/JPEG icon first if mediaUri is available
+    if (mediaUri) {
+      // Try PNG first, then JPG, then JPEG
+      const iconPath = `${mediaUri}/icons/${iconType}.png`;
+      const svgFallback = getSvgIcon(iconType);
+      // Return img tag with SVG fallback that shows if image fails to load
+      return `<img src="${iconPath}" alt="${iconType}" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.onerror=null; this.style.display='none'; const fallback = this.nextElementSibling; if (fallback) { fallback.style.display='flex'; }"><div style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center;">${svgFallback}</div>`;
+    }
+    
+    // Fallback to SVG icons
+    return getSvgIcon(iconType);
+  }
+  
+  function getSvgIcon(iconType) {
     const icons = {
-      context: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2"/></svg>',
-      target: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5"/><path d="M8 3v2M8 11v2M3 8h2M11 8h2"/></svg>',
-      memories: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5c1.2-2 3.2-3 5-3s3.8 1 5 3M3 11c1.2 2 3.2 3 5 3s3.8-1 5-3M3 8h10"/><circle cx="8" cy="8" r="1"/></svg>',
-      rules: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h6l2 2v10H4z"/><path d="M10 2v2h2"/><path d="M6 7h4M6 10h3"/></svg>',
-      selection: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="10" height="6" rx="1"/><path d="M6 2v3M10 2v3M6 11v3M10 11v3"/></svg>',
-      file: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 2h5l3 3v9H5z"/><path d="M10 2v3h3"/></svg>'
+      context: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2"/></svg>',
+      target: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><path d="M8 3v2M8 11v2M3 8h2M11 8h2"/></svg>',
+      memories: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5c1.2-2 3.2-3 5-3s3.8 1 5 3M3 11c1.2 2 3.2 3 5 3s3.8-1 5-3M3 8h10"/><circle cx="8" cy="8" r="1"/></svg>',
+      rules: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h9l3 3v13H4z"/><path d="M15 4v3h3"/><path d="M9 10h6M9 14h4"/></svg>',
+      selection: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="10" height="6" rx="1"/><path d="M6 2v3M10 2v3M6 11v3M10 11v3"/></svg>',
+      file: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h5l3 3v9H5z"/><path d="M10 2v3h3"/></svg>',
+      folder: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h5l2 2h5v8H2z"/></svg>',
+      terminal: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M5 7l2 2-2 2"/></svg>',
+      browser: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 6h12M8 2v8"/></svg>',
+      branch: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M8 10v4M2 8h4M10 8h4"/><circle cx="8" cy="6" r="1.5"/><circle cx="8" cy="10" r="1.5"/><circle cx="6" cy="8" r="1.5"/><circle cx="10" cy="8" r="1.5"/></svg>',
+      ts: '<svg viewBox="0 0 16 16" fill="none"><rect width="16" height="16" rx="2" fill="#3178c6"/><text x="8" y="12" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="white" text-anchor="middle">TS</text></svg>',
+      js: '<svg viewBox="0 0 16 16" fill="none"><rect width="16" height="16" rx="2" fill="#f7df1e"/><text x="8" y="12" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#000" text-anchor="middle">JS</text></svg>',
+      git: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><path d="M6 6l4 4M10 6l-4 4"/></svg>'
     };
     return icons[iconType] || icons.file;
   }
@@ -1447,12 +1580,107 @@
       elements.selectionBtn.disabled = !hasSelection;
       elements.selectionBtn.classList.toggle('disabled', !hasSelection);
     }
+    if (!hasSelection) {
+      hideSelectionTooltip();
+    }
   }
 
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  function showSelectionTooltip(selection) {
+    if (!selection || !elements.selectionBtn) return;
+    if (!elements.selectionBtn.matches(':hover')) return;
+
+    hideSelectionTooltip();
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'selection-tooltip show';
+
+    const startLine = selection.startLine || 1;
+    const endLine = selection.endLine || startLine;
+    const lines = selection.text ? selection.text.split('\n') : [''];
+
+    const lineNumbersHtml = lines
+      .map((_, idx) => `<div class="selection-line-number">${startLine + idx}</div>`)
+      .join('');
+
+    const codeHtml = lines
+      .map(line => `<div class="selection-code-line">${highlightCodeLine(line)}</div>`)
+      .join('');
+
+    tooltip.innerHTML = `
+      <div class="selection-tooltip-header">
+        <span class="selection-file">${escapeHtml(selection.fileName || 'Selected Text')}</span>
+        <span class="selection-range">Lines ${startLine}${endLine !== startLine ? `-${endLine}` : ''}</span>
+      </div>
+      <div class="selection-preview">
+        <div class="selection-code-container">
+          <div class="selection-line-numbers">${lineNumbersHtml}</div>
+          <div class="selection-code-content">${codeHtml}</div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(tooltip);
+
+    const buttonRect = elements.selectionBtn.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    let top = buttonRect.top - tooltipRect.height - 12;
+    if (top < 12) {
+      top = buttonRect.bottom + 12;
+    }
+    let left = buttonRect.left + buttonRect.width / 2 - tooltipRect.width / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - tooltipRect.width - 12));
+
+    tooltip.style.top = `${top}px`;
+    tooltip.style.left = `${left}px`;
+
+    selectionTooltipEl = tooltip;
+    tooltip.addEventListener('mouseleave', hideSelectionTooltip);
+  }
+
+  function hideSelectionTooltip() {
+    if (selectionTooltipEl) {
+      selectionTooltipEl.remove();
+      selectionTooltipEl = null;
+    }
+  }
+
+  function highlightCodeLine(line) {
+    const tokens = [];
+    const placeholder = (text, cls) => {
+      const id = tokens.length;
+      tokens.push({ text, cls });
+      return `__TOKEN_${id}__`;
+    };
+
+    let workingLine = line ?? '';
+
+    const stringRegex = /(["'`])(?:\\.|(?!\1).)*\1/g;
+    workingLine = workingLine.replace(stringRegex, match => placeholder(match, 'code-string'));
+
+    const commentMatch = workingLine.match(/\/\/.*/);
+    if (commentMatch) {
+      workingLine = workingLine.replace(/\/\/.*/, placeholder(commentMatch[0], 'code-comment'));
+    }
+
+    const numberRegex = /\b\d+(\.\d+)?\b/g;
+    workingLine = workingLine.replace(numberRegex, match => placeholder(match, 'code-number'));
+
+    const keywordRegex = /\b(const|let|var|function|class|return|import|from|if|else|for|while|switch|case|break|try|catch|finally|async|await|type|interface|extends|implements|new|this|super|export|default)\b/g;
+    workingLine = workingLine.replace(keywordRegex, match => placeholder(match, 'code-keyword'));
+
+    let escaped = escapeHtml(workingLine);
+    tokens.forEach((token, index) => {
+      const html = `<span class="${token.cls}">${escapeHtml(token.text)}</span>`;
+      escaped = escaped.replace(new RegExp(`__TOKEN_${index}__`, 'g'), html);
+    });
+
+    return escaped || '&nbsp;';
   }
 
 

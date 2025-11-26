@@ -193,9 +193,38 @@ body {
   height: 16px;
 }
 
+.icon-btn .icon-img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: none;
+  /* Make black icons white for dark mode */
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+}
+
+.icon-btn:hover .icon-img {
+  opacity: 1;
+}
+
+.icon-btn.active .icon-img {
+  filter: brightness(0) invert(1);
+  opacity: 1;
+}
+
 .icon-btn.active {
   background: var(--accent-blue);
   color: white;
+}
+
+.model-icon-img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  vertical-align: middle;
+  /* Make black icons white for dark mode */
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
 }
 
 /* Mention Button */
@@ -210,6 +239,11 @@ body {
   color: white;
 }
 
+.mention-btn:active {
+  transform: scale(0.95);
+  transition: transform 0.1s ease;
+}
+
 /* Mention Picker */
 .mention-wrapper {
   position: relative;
@@ -218,21 +252,21 @@ body {
 }
 
 .mention-picker {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  background: #1e1e1e;
-  border: 1px solid var(--border-color);
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #161b22;
+  border: 1px solid #30363d;
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  min-width: 320px;
-  max-width: 400px;
-  max-height: 400px;
-  z-index: 1001;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8);
+  width: 520px;
+  max-height: 420px;
+  z-index: 10000;
   display: none;
   overflow: hidden;
   flex-direction: column;
-  animation: fadeIn 0.2s ease;
+  animation: mentionFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .mention-picker.show {
@@ -240,30 +274,91 @@ body {
   pointer-events: auto;
 }
 
-@keyframes fadeIn {
+@keyframes mentionFadeIn {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translate(-50%, -48%);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, -50%);
   }
+}
+
+.mention-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 9999;
+  display: none;
+  animation: overlayFadeIn 0.15s ease;
+}
+
+.mention-picker-overlay.show {
+  display: block;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.mention-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #30363d;
+  background: #0d1117;
+}
+
+.mention-header-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  text-align: center;
+  margin-bottom: 12px;
+  position: relative;
+  padding-bottom: 12px;
+}
+
+.mention-header-title::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 2px;
+  background: #1f6feb;
+  border-radius: 1px;
 }
 
 .mention-search-container {
   position: relative;
   display: flex;
   align-items: center;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--background-secondary);
+  padding: 10px 14px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  transition: border-color 0.15s ease;
+}
+
+.mention-search-container:focus-within {
+  border-color: #1f6feb;
 }
 
 .mention-search-icon {
   width: 14px;
   height: 14px;
-  color: var(--text-secondary);
+  color: #6e7681;
   margin-right: 8px;
   flex-shrink: 0;
 }
@@ -273,14 +368,14 @@ body {
   background: transparent;
   border: none;
   outline: none;
-  color: var(--text-primary);
+  color: #e6edf3;
   font-size: 13px;
   font-family: inherit;
   padding: 0;
 }
 
 .mention-search-input::placeholder {
-  color: var(--text-placeholder);
+  color: #6e7681;
 }
 
 .mention-list {
@@ -290,26 +385,43 @@ body {
 .mention-suggestions {
   flex: 1;
   overflow-y: auto;
-  max-height: 340px;
-  padding: 6px 0 10px;
+  max-height: 300px;
+  padding: 6px 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+}
+
+.mention-suggestions::-webkit-scrollbar {
+  width: 8px;
+}
+
+.mention-suggestions::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mention-suggestions::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 4px;
+}
+
+.mention-suggestions::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
 }
 
 .mention-item {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  padding: 10px 14px;
+  padding: 10px 20px;
   background: transparent;
   border: none;
-  color: #cccccc;
+  color: #e6edf3;
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.1s ease;
   text-align: left;
+  border-radius: 0;
 }
 
 .mention-item.has-submenu {
@@ -318,29 +430,49 @@ body {
 
 .mention-item:hover,
 .mention-item.selected {
-  background: #2d2d2d;
+  background: #21262d;
 }
 
 .mention-item.selected {
-  background: #094771;
+  background: rgba(31, 111, 235, 0.15);
 }
 
 .mention-item-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--text-secondary);
+  width: 20px;
+  height: 20px;
+  color: #8b949e;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.mention-item-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.mention-item-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .mention-item:hover .mention-item-icon,
 .mention-item.selected .mention-item-icon {
-  color: var(--text-primary);
+  color: #58a6ff;
 }
 
 .mention-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mention-item-label-wrapper {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -349,7 +481,8 @@ body {
 }
 
 .mention-item-label {
-  font-weight: 500;
+  font-weight: 400;
+  color: #e6edf3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -357,7 +490,7 @@ body {
 
 .mention-item-path {
   font-size: 11px;
-  color: var(--text-secondary);
+  color: #8b949e;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -366,29 +499,49 @@ body {
 .mention-item-arrow {
   width: 12px;
   height: 12px;
-  color: var(--text-secondary);
+  color: #8b949e;
   flex-shrink: 0;
   opacity: 0.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mention-item-arrow svg {
+  width: 100%;
+  height: 100%;
 }
 
 .mention-item:hover .mention-item-arrow,
 .mention-item.selected .mention-item-arrow {
   opacity: 1;
+  color: #8b949e;
 }
 
 .mention-category {
-  padding: 8px 14px 4px;
+  padding: 8px 20px 6px;
   font-size: 11px;
-  color: var(--text-secondary);
+  color: #8b949e;
   text-transform: uppercase;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.5px;
+  background: #0d1117;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-top: 1px solid #21262d;
+  margin-top: 4px;
+}
+
+.mention-category:first-of-type {
+  border-top: none;
+  margin-top: 0;
 }
 
 .mention-empty {
-  padding: 20px;
+  padding: 32px 20px;
   text-align: center;
-  color: var(--text-secondary);
+  color: #8b949e;
   font-size: 13px;
 }
 
@@ -651,11 +804,13 @@ body {
   background: #0f1117;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  padding: 12px;
+  padding: 14px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
   display: none;
   z-index: 1050;
-  max-width: 100%;
+  max-width: 480px;
+  min-width: 320px;
+  animation: selectionTooltipFade 0.15s ease;
 }
 
 .selection-tooltip.show {
@@ -663,20 +818,45 @@ body {
 }
 
 .selection-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 10px;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.selection-file {
+  color: #e6edf3;
+  font-weight: 600;
+}
+
+.selection-range {
+  font-size: 12px;
+  color: #58a6ff;
 }
 
 .selection-preview {
-  max-height: 300px;
+  max-height: 260px;
   overflow: auto;
-  margin-bottom: 12px;
-  background: #1e1e1e;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(15,17,23,0.95), rgba(22,27,34,0.95));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
   padding: 0;
+}
+
+@keyframes selectionTooltipFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .selection-code-container {
@@ -1700,65 +1880,75 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: var(--button-disabled);
-  border: none;
-  border-radius: 6px;
-  color: var(--text-secondary);
+  width: 30px;
+  height: 30px;
+  background: #f5f8ff;
+  border: 1px solid rgba(31, 111, 235, 0.35);
+  border-radius: 8px;
+  color: var(--accent-blue);
   cursor: not-allowed;
   transition: all 0.15s ease;
   padding: 0;
+  box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.45);
 }
 
 .send-btn:not(:disabled) {
-  background: var(--accent-blue);
-  color: white;
+  background: white;
   cursor: pointer;
 }
 
 .send-btn:not(:disabled):hover {
-  background: #2563eb;
-  transform: scale(1.05);
+  background: #f0f5ff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(31, 111, 235, 0.25);
 }
 
 .send-btn:not(:disabled):active {
-  transform: scale(0.95);
+  transform: scale(0.96);
+}
+
+.send-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
 }
 
 /* Stop Button (shown during generation) */
 .stop-btn {
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: transparent;
+  width: 30px;
+  height: 30px;
+  background: #2c0f15;
   border: 1px solid var(--accent-red);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--accent-red);
   cursor: pointer;
   transition: all 0.15s ease;
   padding: 0;
+  box-shadow: inset 0 0 12px rgba(248, 81, 73, 0.2);
+}
+
+.stop-btn.visible {
+  display: flex;
 }
 
 .stop-btn:hover {
   background: var(--accent-red);
   color: white;
+  box-shadow: 0 6px 16px rgba(248, 81, 73, 0.4);
 }
 
 .stop-btn svg {
-  width: 12px;
-  height: 12px;
-}
-
-.stop-btn.hidden {
-  display: none;
-}
-
-.send-btn svg {
   width: 16px;
   height: 16px;
+}
+
+.stop-btn svg rect {
+  fill: currentColor;
+  stroke: currentColor;
 }
 
 /* Trash Button - Red on hover */

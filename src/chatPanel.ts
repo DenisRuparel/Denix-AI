@@ -48,7 +48,7 @@ export interface WebviewMessage {
         'initialize' | 'updateState' | 'error' | 'typingIndicator' | 
         'getCurrentPrompt' | 'currentPrompt' | 'dismissContext' | 'enhancedPrompt' |
         'getMentionItems' | 'mentionItems' | 'insertMention' | 'memoriesContent' |
-        'guidelinesContent' | 'rulesList';
+        'guidelinesContent' | 'rulesList' | 'getSelection' | 'selectionData';
   data?: any;
   payload?: any;
 }
@@ -230,6 +230,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview.js')
     );
     
+    // Get media URI for icons
+    const mediaUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'media')
+    );
+    
     // Read and inline CSS
     const stylePath = vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'style.css');
     let styleContent = '';
@@ -237,6 +242,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       styleContent = fs.readFileSync(stylePath.fsPath, 'utf8');
     } catch (error) {
       console.error('Failed to read CSS file:', error);
+    }
+    
+    // Read icon loader script
+    const iconLoaderPath = vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'iconLoader.js');
+    let iconLoaderScript = '';
+    try {
+      iconLoaderScript = fs.readFileSync(iconLoaderPath.fsPath, 'utf8');
+    } catch (error) {
+      console.error('Failed to read icon loader script:', error);
     }
 
     // Use a nonce to only allow specific scripts to be run
@@ -397,13 +411,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                       <path d="M10 10.5c0 .828.672 1.5 1.5 1.5s1.5-.672 1.5-1.5-.672-1.5-1.5-1.5S10 9.672 10 10.5Z"/>
                     </svg>
                   </button>
+                  <div class="mention-picker-overlay" id="mention-picker-overlay"></div>
                   <div class="mention-picker" id="mention-picker" role="menu" aria-hidden="true">
-                    <div class="mention-search-container">
-                      <svg class="mention-search-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <circle cx="7" cy="7" r="5"/>
-                        <path d="M10.5 10.5L14 14"/>
-                      </svg>
-                      <input type="text" class="mention-search-input" id="mention-search-input" placeholder="Search context, files, actions..." autocomplete="off" aria-label="Filter mentions" />
+                    <div class="mention-header">
+                      <div class="mention-header-title">QUICK ACTIONS</div>
+                      <div class="mention-search-container">
+                        <svg class="mention-search-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <circle cx="7" cy="7" r="5"/>
+                          <path d="M10.5 10.5L14 14"/>
+                        </svg>
+                        <input type="text" class="mention-search-input" id="mention-search-input" placeholder="Add files, folders, docs..." autocomplete="off" aria-label="Filter mentions" />
+                      </div>
                     </div>
                     <div class="mention-suggestions" id="mention-suggestions" role="listbox" tabindex="-1"></div>
                   </div>
@@ -469,14 +487,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                     <path d="M10.5 2L14 5.5L10.5 9M5.5 9L2 5.5L5.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
                   </svg>
                 </button>
-                <button class="stop-btn hidden" id="stop-btn" aria-label="Stop generation" title="Stop generation">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                <button class="stop-btn" id="stop-btn" aria-label="Stop generation" title="Stop generation">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <rect x="4" y="4" width="8" height="8" fill="currentColor"/>
                   </svg>
                 </button>
                 <button class="send-btn" id="send-btn" aria-label="Send message" title="Send message" disabled>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M3 8L13 3L9 8L13 13L3 8Z" fill="currentColor"/>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                   </svg>
                 </button>
               </div>
@@ -496,6 +515,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           </div>
         </div>
 
+        <script nonce="${nonce}">
+          window.mediaUri = ${JSON.stringify(mediaUri.toString())};
+        </script>
+        <script nonce="${nonce}">
+          ${iconLoaderScript}
+        </script>
         <script nonce="${nonce}" src="${scriptUri}"></script>
       </body>
       </html>`;
@@ -559,6 +584,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           type: 'mentionItems',
           data: mentionItems
         });
+        break;
+
+      case 'getSelection':
+        const selection = this._selectionWatcher.getSelection();
+        if (selection) {
+          this._sendMessageToWebview({
+            type: 'selectionData',
+            data: {
+              text: selection.text,
+              fileName: selection.fileName,
+              startLine: selection.startLine,
+              endLine: selection.endLine
+            }
+          });
+        }
         break;
 
       case 'insertMention':
