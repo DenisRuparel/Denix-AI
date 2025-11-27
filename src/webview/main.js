@@ -249,8 +249,14 @@
       if (elements.mentionPicker && !elements.mentionPicker.contains(e.target) && e.target !== elements.mentionBtn && e.target !== elements.mentionPickerOverlay) {
         hideMentionPicker();
       }
-      if (selectionTooltipEl && selectionTooltipEl !== e.target && !selectionTooltipEl.contains(e.target) && e.target !== elements.selectionBtn) {
-        hideSelectionTooltip();
+      // Hide selection tooltip when clicking outside both button and tooltip
+      if (selectionTooltipEl) {
+        const clickedInsideTooltip = selectionTooltipEl === e.target || selectionTooltipEl.contains(e.target);
+        const clickedOnButton = e.target === elements.selectionBtn || elements.selectionBtn?.contains(e.target);
+        
+        if (!clickedInsideTooltip && !clickedOnButton) {
+          hideSelectionTooltip();
+        }
       }
     });
 
@@ -264,10 +270,18 @@
       sendMessage({ type: 'command', data: { command: 'openMemories' } });
     });
 
-    window.addEventListener('scroll', hideSelectionTooltip, true);
-    window.addEventListener('resize', hideSelectionTooltip);
+    // Don't hide on scroll - allow scrolling within tooltip
+    window.addEventListener('resize', () => {
+      if (selectionTooltipEl) {
+        // Reposition tooltip on resize instead of hiding
+        const selection = currentSelectionContext;
+        if (selection) {
+          showSelectionTooltip(selection);
+        }
+      }
+    });
 
-    // Selection button hover tooltip
+    // Selection button hover tooltip - show on hover, stay open until click outside
     elements.selectionBtn?.addEventListener('mouseenter', () => {
       if (selectionHoverTimer) {
         clearTimeout(selectionHoverTimer);
@@ -281,12 +295,13 @@
       }, 250);
     });
 
+    // Don't hide on mouse leave - keep tooltip open until click outside
     elements.selectionBtn?.addEventListener('mouseleave', () => {
       if (selectionHoverTimer) {
         clearTimeout(selectionHoverTimer);
         selectionHoverTimer = null;
       }
-      hideSelectionTooltip();
+      // Don't hide tooltip on mouse leave - let it stay open
     });
 
     elements.selectionBtn?.addEventListener('click', () => {
@@ -425,55 +440,9 @@
           showSelectionTooltip(currentSelectionContext);
         }
         break;
-      case 'selectionData':
-        showSelectionTooltip(message.data);
-        break;
       default:
         console.log('Unknown message type:', message.type);
     }
-  }
-  
-  // Show selection tooltip
-  function showSelectionTooltip(selection) {
-    if (!selection || !selection.text) return;
-    
-    const btn = elements.selectionBtn;
-    if (!btn) return;
-    
-    // Remove existing tooltip
-    const existing = document.querySelector('.selection-hover-tooltip');
-    if (existing) existing.remove();
-    
-    const tooltip = document.createElement('div');
-    tooltip.className = 'selection-hover-tooltip';
-    
-    const preview = selection.text.length > 200 
-      ? selection.text.substring(0, 200) + '...' 
-      : selection.text;
-    
-    tooltip.innerHTML = `
-      <div class="selection-tooltip-header">
-        ${selection.fileName || 'Selected Text'}${selection.startLine ? `:${selection.startLine}-${selection.endLine}` : ''}
-      </div>
-      <div class="selection-tooltip-preview">${escapeHtml(preview)}</div>
-    `;
-    
-    document.body.appendChild(tooltip);
-    
-    // Position tooltip
-    const rect = btn.getBoundingClientRect();
-    tooltip.style.top = `${rect.top - tooltip.offsetHeight - 8}px`;
-    tooltip.style.left = `${rect.left + rect.width / 2 - tooltip.offsetWidth / 2}px`;
-    
-    // Cleanup on mouse leave
-    const cleanup = () => {
-      if (tooltip && tooltip.parentNode) {
-        tooltip.remove();
-      }
-    };
-    
-    btn.addEventListener('mouseleave', cleanup, { once: true });
-    tooltip.addEventListener('mouseleave', cleanup, { once: true });
   }
 
   // Update state and UI
@@ -1629,18 +1598,36 @@
 
     const buttonRect = elements.selectionBtn.getBoundingClientRect();
     const tooltipRect = tooltip.getBoundingClientRect();
-    let top = buttonRect.top - tooltipRect.height - 12;
+    let top = buttonRect.top - tooltipRect.height - 8; // Reduced gap from 12 to 8
     if (top < 12) {
-      top = buttonRect.bottom + 12;
+      top = buttonRect.bottom + 8; // Reduced gap from 12 to 8
     }
     let left = buttonRect.left + buttonRect.width / 2 - tooltipRect.width / 2;
     left = Math.max(12, Math.min(left, window.innerWidth - tooltipRect.width - 12));
+    
+    // Ensure tooltip is positioned to minimize gap for easier mouse movement
+    // If tooltip is above button, align bottom edge closer
+    if (top < buttonRect.top) {
+      // Tooltip is above, make sure there's minimal gap
+      const gap = buttonRect.top - (top + tooltipRect.height);
+      if (gap > 8) {
+        top = buttonRect.top - tooltipRect.height - 4; // Very small gap
+      }
+    } else {
+      // Tooltip is below, make sure there's minimal gap
+      const gap = top - buttonRect.bottom;
+      if (gap > 8) {
+        top = buttonRect.bottom + 4; // Very small gap
+      }
+    }
 
     tooltip.style.top = `${top}px`;
     tooltip.style.left = `${left}px`;
 
     selectionTooltipEl = tooltip;
-    tooltip.addEventListener('mouseleave', hideSelectionTooltip);
+    
+    // Tooltip stays open once shown - only closes on click outside
+    // No mouse leave handlers needed - tooltip is sticky
   }
 
   function hideSelectionTooltip() {

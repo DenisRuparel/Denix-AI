@@ -811,6 +811,11 @@ body {
   max-width: 480px;
   min-width: 320px;
   animation: selectionTooltipFade 0.15s ease;
+  pointer-events: auto;
+  user-select: text;
+  cursor: text;
+  /* Ensure tooltip doesn't disappear when mouse moves over it */
+  will-change: transform;
 }
 
 .selection-tooltip.show {
@@ -841,11 +846,32 @@ body {
 
 .selection-preview {
   max-height: 260px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: auto;
   background: linear-gradient(145deg, rgba(15,17,23,0.95), rgba(22,27,34,0.95));
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 0;
+  pointer-events: auto;
+}
+
+.selection-preview::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.selection-preview::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.selection-preview::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.selection-preview::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 @keyframes selectionTooltipFade {
@@ -891,6 +917,7 @@ body {
   color: #d4d4d4;
   overflow-x: auto;
   white-space: pre;
+  min-width: 0;
 }
 
 .selection-code-line {
