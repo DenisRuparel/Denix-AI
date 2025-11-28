@@ -126,8 +126,6 @@
   let currentSelectionContext = null;
   let selectionTooltipEl = null;
   let selectionHoverTimer = null;
-  let selectionTooltipEl = null;
-  let selectionHoverTimer = null;
 
   // Initialize
   function init() {
@@ -307,22 +305,13 @@
     // Modern toggle switch handler
     const autoSwitch = document.getElementById('auto-switch');
     if (autoSwitch) {
-      // Initialize state - default to OFF (false)
-      // Start with no is-on class (dark gray)
+      // Force initial state to OFF (dark gray) - will be updated by updateUI if needed
       autoSwitch.classList.remove('is-on');
       autoSwitch.setAttribute('aria-checked', 'false');
       
-      // Update based on state if available (but default is false)
-      if (state.autoMode === true) {
-        autoSwitch.classList.add('is-on');
-        autoSwitch.setAttribute('aria-checked', 'true');
-      } else {
-        // Ensure it's OFF
-        autoSwitch.classList.remove('is-on');
-        autoSwitch.setAttribute('aria-checked', 'false');
-      }
-      
-      autoSwitch.addEventListener('click', (e) => {
+      // Set up click handler
+      const handleSwitchClick = (e) => {
+        e.preventDefault();
         e.stopPropagation();
         const isChecked = autoSwitch.getAttribute('aria-checked') === 'true';
         const newState = !isChecked;
@@ -332,13 +321,21 @@
         } else {
           autoSwitch.classList.remove('is-on');
         }
+        // Update state and send message
+        state.autoMode = newState;
         sendMessage({ type: 'command', data: { command: 'toggleAuto' } });
+      };
+      
+      autoSwitch.addEventListener('click', handleSwitchClick);
+      autoSwitch.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
       });
       
       autoSwitch.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          autoSwitch.click();
+          e.stopPropagation();
+          handleSwitchClick(e);
         }
       });
     }
@@ -350,30 +347,50 @@
 
 
     // Bottom row actions
-    elements.askQuestionBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      sendMessage({ type: 'command', data: { command: 'askQuestion' } });
-    });
+    if (elements.askQuestionBtn) {
+      elements.askQuestionBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Ask question clicked');
+        sendMessage({ type: 'command', data: { command: 'askQuestion' } });
+      });
+    }
 
-    elements.enhanceBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      sendMessage({ type: 'command', data: { command: 'enhancePrompt' } });
-    });
+    if (elements.enhanceBtn) {
+      elements.enhanceBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Enhance clicked');
+        sendMessage({ type: 'command', data: { command: 'enhancePrompt' } });
+      });
+    }
 
-    elements.modelBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      sendMessage({ type: 'command', data: { command: 'selectModel' } });
-    });
+    if (elements.modelBtn) {
+      elements.modelBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Model clicked');
+        sendMessage({ type: 'command', data: { command: 'selectModel' } });
+      });
+    }
 
-    elements.attachBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      sendMessage({ type: 'fileAttach', data: {} });
-    });
+    if (elements.attachBtn) {
+      elements.attachBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Attach clicked');
+        sendMessage({ type: 'fileAttach', data: {} });
+      });
+    }
 
-    elements.sendBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      sendUserMessage();
-    });
+    if (elements.sendBtn) {
+      elements.sendBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Send clicked');
+        sendUserMessage();
+      });
+    }
 
     elements.stopBtn?.addEventListener('click', () => {
       stopGeneration();
@@ -823,9 +840,10 @@
     const activeTab = document.getElementById(`tab-${state.activeTab}`);
     activeTab?.classList.add('active');
 
-    // Update auto switch
+    // Update auto switch - only update if state.autoMode is explicitly true
     const autoSwitch = document.getElementById('auto-switch');
     if (autoSwitch) {
+      // Default to false if not explicitly set to true
       const isOn = state.autoMode === true;
       autoSwitch.setAttribute('aria-checked', isOn.toString());
       if (isOn) {
@@ -833,6 +851,8 @@
       } else {
         autoSwitch.classList.remove('is-on');
       }
+      // Also update the state to match
+      state.autoMode = isOn;
     }
 
     // Update model button - show short name without emoji
