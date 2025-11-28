@@ -11,7 +11,7 @@
     messages: [],
     attachments: [],
     selectedModel: 'anthropic/claude-3.5-sonnet',
-    autoMode: true,
+    autoMode: false,
     activeTab: 'thread',
     currentFile: undefined,
     isGenerating: false
@@ -49,7 +49,7 @@
     mentionSuggestions: document.getElementById('mention-suggestions'),
     memoriesBtn: document.getElementById('memories-btn'),
     selectionBtn: document.getElementById('selection-btn'),
-    autoBtn: document.getElementById('auto-btn'),
+    // autoBtn removed - using modern-toggle-switch instead
     askQuestionBtn: document.getElementById('ask-question-btn'),
     enhanceBtn: document.getElementById('enhance-btn'),
     modelBtn: document.getElementById('model-btn'),
@@ -124,6 +124,8 @@
 
   // Panel state
   let currentSelectionContext = null;
+  let selectionTooltipEl = null;
+  let selectionHoverTimer = null;
   let selectionTooltipEl = null;
   let selectionHoverTimer = null;
 
@@ -270,18 +272,7 @@
       sendMessage({ type: 'command', data: { command: 'openMemories' } });
     });
 
-    // Don't hide on scroll - allow scrolling within tooltip
-    window.addEventListener('resize', () => {
-      if (selectionTooltipEl) {
-        // Reposition tooltip on resize instead of hiding
-        const selection = currentSelectionContext;
-        if (selection) {
-          showSelectionTooltip(selection);
-        }
-      }
-    });
-
-    // Selection button hover tooltip - show on hover, stay open until click outside
+    // Selection button hover tooltip
     elements.selectionBtn?.addEventListener('mouseenter', () => {
       if (selectionHoverTimer) {
         clearTimeout(selectionHoverTimer);
@@ -292,16 +283,20 @@
         } else {
           sendMessage({ type: 'getSelection' });
         }
-      }, 250);
+      }, 300);
     });
 
-    // Don't hide on mouse leave - keep tooltip open until click outside
     elements.selectionBtn?.addEventListener('mouseleave', () => {
       if (selectionHoverTimer) {
         clearTimeout(selectionHoverTimer);
         selectionHoverTimer = null;
       }
-      // Don't hide tooltip on mouse leave - let it stay open
+      // Don't hide immediately - let user move to tooltip
+      setTimeout(() => {
+        if (!elements.selectionBtn?.matches(':hover') && (!selectionTooltipEl || !selectionTooltipEl.matches(':hover'))) {
+          hideSelectionTooltip();
+        }
+      }, 100);
     });
 
     elements.selectionBtn?.addEventListener('click', () => {
@@ -309,30 +304,74 @@
       sendMessage({ type: 'command', data: { command: 'toggleSelection' } });
     });
 
+    // Modern toggle switch handler
+    const autoSwitch = document.getElementById('auto-switch');
+    if (autoSwitch) {
+      // Initialize state - default to OFF (false)
+      // Start with no is-on class (dark gray)
+      autoSwitch.classList.remove('is-on');
+      autoSwitch.setAttribute('aria-checked', 'false');
+      
+      // Update based on state if available (but default is false)
+      if (state.autoMode === true) {
+        autoSwitch.classList.add('is-on');
+        autoSwitch.setAttribute('aria-checked', 'true');
+      } else {
+        // Ensure it's OFF
+        autoSwitch.classList.remove('is-on');
+        autoSwitch.setAttribute('aria-checked', 'false');
+      }
+      
+      autoSwitch.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isChecked = autoSwitch.getAttribute('aria-checked') === 'true';
+        const newState = !isChecked;
+        autoSwitch.setAttribute('aria-checked', newState.toString());
+        if (newState) {
+          autoSwitch.classList.add('is-on');
+        } else {
+          autoSwitch.classList.remove('is-on');
+        }
+        sendMessage({ type: 'command', data: { command: 'toggleAuto' } });
+      });
+      
+      autoSwitch.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          autoSwitch.click();
+        }
+      });
+    }
+
+    elements.selectionBtn?.addEventListener('click', () => {
+      sendMessage({ type: 'command', data: { command: 'toggleSelection' } });
+    });
+
 
 
     // Bottom row actions
-    elements.autoBtn?.addEventListener('click', () => {
-      sendMessage({ type: 'command', data: { command: 'toggleAuto' } });
-    });
-
-    elements.askQuestionBtn?.addEventListener('click', () => {
+    elements.askQuestionBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
       sendMessage({ type: 'command', data: { command: 'askQuestion' } });
     });
 
-    elements.enhanceBtn?.addEventListener('click', () => {
+    elements.enhanceBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
       sendMessage({ type: 'command', data: { command: 'enhancePrompt' } });
     });
 
-    elements.modelBtn?.addEventListener('click', () => {
+    elements.modelBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
       sendMessage({ type: 'command', data: { command: 'selectModel' } });
     });
 
-    elements.attachBtn?.addEventListener('click', () => {
+    elements.attachBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
       sendMessage({ type: 'fileAttach', data: {} });
     });
 
-    elements.sendBtn?.addEventListener('click', () => {
+    elements.sendBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
       sendUserMessage();
     });
 
@@ -784,24 +823,25 @@
     const activeTab = document.getElementById(`tab-${state.activeTab}`);
     activeTab?.classList.add('active');
 
-    // Update auto button
-    if (elements.autoBtn) {
-      const indicator = elements.autoBtn.querySelector('.toggle-indicator');
-      if (state.autoMode) {
-        elements.autoBtn.classList.add('active');
-        if (indicator) indicator.textContent = '◉';
+    // Update auto switch
+    const autoSwitch = document.getElementById('auto-switch');
+    if (autoSwitch) {
+      const isOn = state.autoMode === true;
+      autoSwitch.setAttribute('aria-checked', isOn.toString());
+      if (isOn) {
+        autoSwitch.classList.add('is-on');
       } else {
-        elements.autoBtn.classList.remove('active');
-        if (indicator) indicator.textContent = '○';
+        autoSwitch.classList.remove('is-on');
       }
     }
 
-    // Update model button
+    // Update model button - show short name without emoji
     if (elements.modelBtn) {
       const modelNameEl = elements.modelBtn.querySelector('.model-name');
       if (modelNameEl) {
         const modelName = state.selectedModel.split('/').pop() || 'Claude';
-        const shortName = modelName.length > 8 ? modelName.substring(0, 8) + '...' : modelName;
+        // Show very short name like "Claude..."
+        const shortName = modelName.length > 6 ? modelName.substring(0, 6) + '...' : modelName;
         modelNameEl.textContent = shortName;
       }
     }
@@ -1554,33 +1594,26 @@
     }
   }
 
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
   function showSelectionTooltip(selection) {
-    if (!selection || !elements.selectionBtn) return;
-    if (!elements.selectionBtn.matches(':hover')) return;
-
+    if (!selection || !selection.text || !elements.selectionBtn) return;
+    
     hideSelectionTooltip();
-
+    
     const tooltip = document.createElement('div');
     tooltip.className = 'selection-tooltip show';
-
+    
     const startLine = selection.startLine || 1;
     const endLine = selection.endLine || startLine;
     const lines = selection.text ? selection.text.split('\n') : [''];
-
+    
     const lineNumbersHtml = lines
       .map((_, idx) => `<div class="selection-line-number">${startLine + idx}</div>`)
       .join('');
-
+    
     const codeHtml = lines
       .map(line => `<div class="selection-code-line">${highlightCodeLine(line)}</div>`)
       .join('');
-
+    
     tooltip.innerHTML = `
       <div class="selection-tooltip-header">
         <span class="selection-file">${escapeHtml(selection.fileName || 'Selected Text')}</span>
@@ -1593,41 +1626,34 @@
         </div>
       </div>
     `;
-
+    
     document.body.appendChild(tooltip);
-
+    
     const buttonRect = elements.selectionBtn.getBoundingClientRect();
     const tooltipRect = tooltip.getBoundingClientRect();
-    let top = buttonRect.top - tooltipRect.height - 8; // Reduced gap from 12 to 8
+    let top = buttonRect.top - tooltipRect.height - 8;
     if (top < 12) {
-      top = buttonRect.bottom + 8; // Reduced gap from 12 to 8
+      top = buttonRect.bottom + 8;
     }
     let left = buttonRect.left + buttonRect.width / 2 - tooltipRect.width / 2;
     left = Math.max(12, Math.min(left, window.innerWidth - tooltipRect.width - 12));
     
-    // Ensure tooltip is positioned to minimize gap for easier mouse movement
-    // If tooltip is above button, align bottom edge closer
-    if (top < buttonRect.top) {
-      // Tooltip is above, make sure there's minimal gap
-      const gap = buttonRect.top - (top + tooltipRect.height);
-      if (gap > 8) {
-        top = buttonRect.top - tooltipRect.height - 4; // Very small gap
-      }
-    } else {
-      // Tooltip is below, make sure there's minimal gap
-      const gap = top - buttonRect.bottom;
-      if (gap > 8) {
-        top = buttonRect.bottom + 4; // Very small gap
-      }
-    }
-
     tooltip.style.top = `${top}px`;
     tooltip.style.left = `${left}px`;
-
+    
     selectionTooltipEl = tooltip;
     
-    // Tooltip stays open once shown - only closes on click outside
-    // No mouse leave handlers needed - tooltip is sticky
+    // Keep tooltip open when hovering over it
+    tooltip.addEventListener('mouseenter', () => {
+      if (selectionHoverTimer) {
+        clearTimeout(selectionHoverTimer);
+        selectionHoverTimer = null;
+      }
+    });
+    
+    tooltip.addEventListener('mouseleave', () => {
+      hideSelectionTooltip();
+    });
   }
 
   function hideSelectionTooltip() {
@@ -1635,6 +1661,89 @@
       selectionTooltipEl.remove();
       selectionTooltipEl = null;
     }
+    if (selectionHoverTimer) {
+      clearTimeout(selectionHoverTimer);
+      selectionHoverTimer = null;
+    }
+  }
+
+  function showSelectionTooltip(selection) {
+    if (!selection || !selection.text || !elements.selectionBtn) return;
+    
+    hideSelectionTooltip();
+    
+    const tooltip = document.createElement('div');
+    tooltip.className = 'selection-tooltip show';
+    
+    const startLine = selection.startLine || 1;
+    const endLine = selection.endLine || startLine;
+    const lines = selection.text ? selection.text.split('\n') : [''];
+    
+    const lineNumbersHtml = lines
+      .map((_, idx) => `<div class="selection-line-number">${startLine + idx}</div>`)
+      .join('');
+    
+    const codeHtml = lines
+      .map(line => `<div class="selection-code-line">${highlightCodeLine(line)}</div>`)
+      .join('');
+    
+    tooltip.innerHTML = `
+      <div class="selection-tooltip-header">
+        <span class="selection-file">${escapeHtml(selection.fileName || 'Selected Text')}</span>
+        <span class="selection-range">Lines ${startLine}${endLine !== startLine ? `-${endLine}` : ''}</span>
+      </div>
+      <div class="selection-preview">
+        <div class="selection-code-container">
+          <div class="selection-line-numbers">${lineNumbersHtml}</div>
+          <div class="selection-code-content">${codeHtml}</div>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(tooltip);
+    
+    const buttonRect = elements.selectionBtn.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    let top = buttonRect.top - tooltipRect.height - 8;
+    if (top < 12) {
+      top = buttonRect.bottom + 8;
+    }
+    let left = buttonRect.left + buttonRect.width / 2 - tooltipRect.width / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - tooltipRect.width - 12));
+    
+    tooltip.style.top = `${top}px`;
+    tooltip.style.left = `${left}px`;
+    
+    selectionTooltipEl = tooltip;
+    
+    // Keep tooltip open when hovering over it
+    tooltip.addEventListener('mouseenter', () => {
+      if (selectionHoverTimer) {
+        clearTimeout(selectionHoverTimer);
+        selectionHoverTimer = null;
+      }
+    });
+    
+    tooltip.addEventListener('mouseleave', () => {
+      hideSelectionTooltip();
+    });
+  }
+
+  function hideSelectionTooltip() {
+    if (selectionTooltipEl) {
+      selectionTooltipEl.remove();
+      selectionTooltipEl = null;
+    }
+    if (selectionHoverTimer) {
+      clearTimeout(selectionHoverTimer);
+      selectionHoverTimer = null;
+    }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   function highlightCodeLine(line) {

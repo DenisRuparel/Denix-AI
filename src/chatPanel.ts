@@ -464,18 +464,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             <!-- Bottom Row: Action Buttons -->
             <div class="actions-row">
               <div class="actions-left">
-                <button class="toggle-btn" id="auto-btn" aria-label="Auto mode" title="Auto mode">
-                  <span class="toggle-indicator">◉</span>
-                  <span>Auto</span>
-                </button>
+                <div class="modern-toggle-switch" id="auto-switch" role="switch" aria-checked="false" aria-label="Auto mode" tabindex="0">
+                  <div class="toggle-track">
+                    <div class="toggle-knob"></div>
+                    <span class="toggle-label">Auto</span>
+                  </div>
+                </div>
                 <button class="icon-btn" id="enhance-btn" aria-label="Enhance Prompt" title="Enhance Prompt">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M8 1L10 6L15 8L10 10L8 15L6 10L1 8L6 6L8 1Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
                   </svg>
                 </button>
                 <button class="model-btn" id="model-btn" aria-label="Select model" title="Select model">
-                  <span class="model-icon">🤖</span>
-                  <span class="model-name">Claud...</span>
+                  <img class="model-icon-img" src="${webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'icons', 'model-select.png'))}" alt="Model" onerror="this.style.display='none';" />
+                  <span class="model-name">Claude...</span>
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="dropdown-arrow">
                     <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
                   </svg>
