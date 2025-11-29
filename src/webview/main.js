@@ -305,37 +305,19 @@
     // Modern toggle switch handler
     const autoSwitch = document.getElementById('auto-switch');
     if (autoSwitch) {
-      // Force initial state to OFF (dark gray) - will be updated by updateUI if needed
-      autoSwitch.classList.remove('is-on');
-      autoSwitch.setAttribute('aria-checked', 'false');
-      
-      // Set up click handler
-      const handleSwitchClick = (e) => {
+      // Let updateUI() control visual state based on state.autoMode.
+      // Here we only send the toggle command.
+      autoSwitch.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const isChecked = autoSwitch.getAttribute('aria-checked') === 'true';
-        const newState = !isChecked;
-        autoSwitch.setAttribute('aria-checked', newState.toString());
-        if (newState) {
-          autoSwitch.classList.add('is-on');
-        } else {
-          autoSwitch.classList.remove('is-on');
-        }
-        // Update state and send message
-        state.autoMode = newState;
         sendMessage({ type: 'command', data: { command: 'toggleAuto' } });
-      };
-      
-      autoSwitch.addEventListener('click', handleSwitchClick);
-      autoSwitch.addEventListener('mousedown', (e) => {
-        e.stopPropagation();
       });
-      
+
       autoSwitch.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           e.stopPropagation();
-          handleSwitchClick(e);
+          sendMessage({ type: 'command', data: { command: 'toggleAuto' } });
         }
       });
     }
