@@ -459,6 +459,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 rows="1"
                 aria-label="Message input"
               ></textarea>
+              <!-- Custom @ Menu -->
+              <div class="at-menu" id="at-menu" role="menu" aria-hidden="true">
+                <div class="at-menu-header" id="at-menu-header"></div>
+                <div class="at-menu-items" id="at-menu-items"></div>
+              </div>
             </div>
             
             <!-- Bottom Row: Action Buttons -->

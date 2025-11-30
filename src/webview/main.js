@@ -47,6 +47,9 @@
     mentionPickerOverlay: document.getElementById('mention-picker-overlay'),
     mentionSearchInput: document.getElementById('mention-search-input'),
     mentionSuggestions: document.getElementById('mention-suggestions'),
+    atMenu: document.getElementById('at-menu'),
+    atMenuHeader: document.getElementById('at-menu-header'),
+    atMenuItems: document.getElementById('at-menu-items'),
     memoriesBtn: document.getElementById('memories-btn'),
     selectionBtn: document.getElementById('selection-btn'),
     // autoBtn removed - using modern-toggle-switch instead
@@ -121,6 +124,10 @@
   let mentionItems = [];
   let selectedMentionIndex = -1;
   let mentionSearchTerm = '';
+  
+  // @ Menu state
+  let atMenuItems = [];
+  let selectedAtMenuIndex = -1;
 
   // Panel state
   let currentSelectionContext = null;
@@ -204,15 +211,17 @@
     elements.tabTasks?.addEventListener('click', () => switchTab('tasks'));
     elements.tabEdits?.addEventListener('click', () => switchTab('edits'));
 
-    // Top row quick actions
+    // Top row quick actions - @ icon click handler
     elements.mentionBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
       e.preventDefault();
-      // Immediate response
-      if (elements.mentionPicker?.classList.contains('show')) {
-        hideMentionPicker(true);
+      // Toggle @ menu
+      if (isAtMenuOpen()) {
+        hideAtMenu();
       } else {
-        showMentionPicker(true);
+        // Close old mention picker if open
+        hideMentionPicker(true);
+        showAtMenu();
       }
     });
     
@@ -223,9 +232,13 @@
     });
 
     elements.mentionBtn?.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown') {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        showMentionPicker(true);
+        // Show new @ menu instead of old picker
+        if (!isAtMenuOpen()) {
+          hideMentionPicker(true);
+          showAtMenu();
+        }
       }
     });
 
@@ -248,6 +261,10 @@
     document.addEventListener('click', (e) => {
       if (elements.mentionPicker && !elements.mentionPicker.contains(e.target) && e.target !== elements.mentionBtn && e.target !== elements.mentionPickerOverlay) {
         hideMentionPicker();
+      }
+      // Hide @ menu when clicking outside
+      if (elements.atMenu && !elements.atMenu.contains(e.target) && e.target !== elements.messageInput) {
+        hideAtMenu();
       }
       // Hide selection tooltip when clicking outside both button and tooltip
       if (selectionTooltipEl) {
@@ -379,24 +396,74 @@
     });
 
     // Message input handlers
-    elements.messageInput?.addEventListener('input', () => {
+    elements.messageInput?.addEventListener('input', (e) => {
       updateSendButtonState();
       // Auto-resize handled in setupTextareaAutoResize
+      
+      // Check if @ was just typed
+      const textarea = e.target;
+      const cursorPos = textarea.selectionStart;
+      const textBeforeCursor = textarea.value.substring(0, cursorPos);
+      const lastChar = textBeforeCursor[cursorPos - 1];
+      
+      if (lastChar === '@') {
+        // Hide old mention picker first
+        hideMentionPicker(true);
+        // Show new @ menu
+        showAtMenu();
+      } else if (isAtMenuOpen()) {
+        // Check if cursor moved away from @
+        const atIndex = textBeforeCursor.lastIndexOf('@');
+        if (atIndex === -1 || cursorPos <= atIndex) {
+          hideAtMenu();
+        }
+      } else if (elements.mentionPicker?.classList.contains('show')) {
+        // If old picker is open and @ menu is not, close old picker
+        hideMentionPicker(true);
+      }
     });
 
     elements.messageInput?.addEventListener('keydown', (e) => {
+      // Handle @ menu navigation when open
+      if (isAtMenuOpen()) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          navigateAtMenu(1);
+          return;
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          navigateAtMenu(-1);
+          return;
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          selectAtMenuItem();
+          return;
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          hideAtMenu();
+          return;
+        }
+      }
+      
+      // Normal input handling
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         if (!elements.sendBtn?.disabled) {
           sendUserMessage();
         }
       } else if (e.key === '@' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        setTimeout(() => showMentionPicker(false), 0);
+        e.preventDefault(); // Prevent VS Code default menu
+        // Menu will be shown by input event handler
       } else if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         clearAllAttachments();
       } else if (e.key === 'Escape') {
-        elements.messageInput?.blur();
+        if (isAtMenuOpen()) {
+          e.preventDefault();
+          hideAtMenu();
+        } else {
+          elements.messageInput?.blur();
+        }
       }
     });
 
@@ -1345,6 +1412,14 @@
   }
 
   function showMentionPicker(focusSearch = false) {
+    // DEPRECATED: Redirect to new @ menu instead
+    // This prevents the old mention picker from showing
+    hideMentionPicker(true);
+    showAtMenu();
+    return;
+    
+    // Old code (disabled):
+    /*
     if (!elements.mentionPicker || !elements.mentionBtn) return;
     if (elements.mentionPickerOverlay) {
       elements.mentionPickerOverlay.classList.add('show');
@@ -1360,6 +1435,7 @@
     mentionSearchTerm = '';
     renderMentionItems(workspaceMentionItems);
     requestMentionItems('');
+    */
     if (focusSearch) {
       setTimeout(() => elements.mentionSearchInput?.focus(), 10);
     }
@@ -1579,6 +1655,191 @@
       git: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><path d="M6 6l4 4M10 6l-4 4"/></svg>'
     };
     return icons[iconType] || icons.file;
+  }
+
+  // @ Menu Functions
+  function isAtMenuOpen() {
+    return elements.atMenu && elements.atMenu.classList.contains('show');
+  }
+
+  function showAtMenu() {
+    if (!elements.atMenu || !elements.messageInput) return;
+    
+    // Close old mention picker if open
+    hideMentionPicker(true);
+    
+    // Initialize menu items - exact match to screenshot
+    atMenuItems = [
+      { id: 'files', label: 'Files & Folders', icon: 'folder', token: '@files', hasChevron: true },
+      { id: 'docs', label: 'Docs', icon: 'file', token: '@docs', hasChevron: true },
+      { id: 'terminals', label: 'Terminals', icon: 'terminal', token: '@terminals', hasChevron: true },
+      { id: 'branch', label: 'Branch (Diff with Main)', icon: 'branch', token: '@branch', hasChevron: false },
+      { id: 'browser', label: 'Browser', icon: 'browser', token: '@browser', hasChevron: false }
+    ];
+    
+    // Get current file context if available
+    const currentFile = state.currentFile;
+    if (currentFile) {
+      const fileName = currentFile.split('/').pop() || currentFile;
+      renderAtMenuHeader(fileName, currentFile);
+    } else {
+      elements.atMenuHeader.innerHTML = '';
+    }
+    
+    renderAtMenuItems();
+    // Position menu after rendering so we can get accurate height
+    setTimeout(() => {
+      positionAtMenu();
+    }, 0);
+    elements.atMenu.classList.add('show');
+    elements.atMenu.setAttribute('aria-hidden', 'false');
+    selectedAtMenuIndex = 0;
+    updateAtMenuSelection();
+    
+    // Focus first item for keyboard navigation
+    setTimeout(() => {
+      const firstItem = elements.atMenuItems?.querySelector('.at-menu-item');
+      if (firstItem) {
+        firstItem.focus();
+      }
+    }, 10);
+  }
+
+  function hideAtMenu() {
+    if (!elements.atMenu) return;
+    elements.atMenu.classList.remove('show');
+    elements.atMenu.setAttribute('aria-hidden', 'true');
+    selectedAtMenuIndex = -1;
+  }
+
+  function positionAtMenu() {
+    if (!elements.atMenu || !elements.mentionBtn) return;
+    const btnRect = elements.mentionBtn.getBoundingClientRect();
+    const wrapperRect = elements.mentionBtn.closest('.input-wrapper')?.getBoundingClientRect();
+    if (!wrapperRect) return;
+    
+    // Position above the @ icon button using bottom positioning
+    // Calculate distance from button top to wrapper bottom
+    const distanceFromBottom = wrapperRect.bottom - btnRect.top;
+    elements.atMenu.style.bottom = `${distanceFromBottom + 4}px`;
+    elements.atMenu.style.left = `${btnRect.left - wrapperRect.left}px`;
+    elements.atMenu.style.top = 'auto'; // Clear any top positioning
+  }
+
+  function renderAtMenuHeader(fileName, filePath) {
+    if (!elements.atMenuHeader) return;
+    const icon = getSvgIcon('file');
+    // Format: "style.css  src/webview" - filename and path on same line
+    const pathParts = filePath.split('/');
+    const relativePath = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : '';
+    elements.atMenuHeader.innerHTML = `
+      <div class="at-menu-header-content">
+        <div class="at-menu-header-icon">${icon}</div>
+        <div class="at-menu-header-text">
+          <span class="at-menu-header-name">${escapeHtml(fileName)}</span>
+          ${relativePath ? `<span class="at-menu-header-path">  ${escapeHtml(relativePath)}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAtMenuItems() {
+    if (!elements.atMenuItems) return;
+    
+    let html = '';
+    atMenuItems.forEach((item, index) => {
+      const icon = getSvgIcon(item.icon);
+      const chevron = item.hasChevron ? '<div class="at-menu-item-chevron">></div>' : '';
+      const tabIndex = index === 0 ? 'tabindex="0"' : 'tabindex="-1"';
+      html += `
+        <button class="at-menu-item" data-index="${index}" role="menuitem" ${tabIndex}>
+          <div class="at-menu-item-icon">${icon}</div>
+          <div class="at-menu-item-label">${escapeHtml(item.label)}</div>
+          ${chevron}
+        </button>
+      `;
+    });
+    
+    elements.atMenuItems.innerHTML = html;
+    
+    // Add click handlers
+    const items = elements.atMenuItems.querySelectorAll('.at-menu-item');
+    items.forEach(item => {
+      item.addEventListener('click', () => {
+        const index = Number(item.getAttribute('data-index'));
+        selectAtMenuItem(index);
+      });
+      
+      item.addEventListener('mouseenter', () => {
+        selectedAtMenuIndex = Number(item.getAttribute('data-index'));
+        updateAtMenuSelection();
+      });
+    });
+  }
+
+  function updateAtMenuSelection() {
+    if (!elements.atMenuItems) return;
+    const items = elements.atMenuItems.querySelectorAll('.at-menu-item');
+    items.forEach((item, index) => {
+      if (index === selectedAtMenuIndex) {
+        item.classList.add('selected');
+        item.setAttribute('tabindex', '0');
+        item.focus();
+        // Scroll into view if needed
+        item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        item.classList.remove('selected');
+        item.setAttribute('tabindex', '-1');
+      }
+    });
+  }
+
+  function navigateAtMenu(direction) {
+    if (atMenuItems.length === 0) return;
+    selectedAtMenuIndex += direction;
+    if (selectedAtMenuIndex < 0) {
+      selectedAtMenuIndex = atMenuItems.length - 1;
+    } else if (selectedAtMenuIndex >= atMenuItems.length) {
+      selectedAtMenuIndex = 0;
+    }
+    updateAtMenuSelection();
+  }
+
+  function selectAtMenuItem(index = null) {
+    const idx = index !== null ? index : selectedAtMenuIndex;
+    if (idx < 0 || idx >= atMenuItems.length) return;
+    
+    const item = atMenuItems[idx];
+    
+    // Handle different menu item actions
+    switch (item.id) {
+      case 'files':
+        // TODO: Implement files & folders context selection
+        sendMessage({ type: 'command', data: { command: 'selectFilesContext' } });
+        break;
+      case 'docs':
+        // TODO: Implement docs context selection
+        sendMessage({ type: 'command', data: { command: 'selectDocsContext' } });
+        break;
+      case 'terminals':
+        // TODO: Implement terminals context selection
+        sendMessage({ type: 'command', data: { command: 'selectTerminalsContext' } });
+        break;
+      case 'branch':
+        // TODO: Implement branch diff context selection
+        sendMessage({ type: 'command', data: { command: 'selectBranchContext' } });
+        break;
+      case 'browser':
+        // TODO: Implement browser context selection
+        sendMessage({ type: 'command', data: { command: 'selectBrowserContext' } });
+        break;
+      default:
+        insertMentionToken(item.token);
+    }
+    
+    hideAtMenu();
+    // Return focus to input
+    elements.messageInput?.focus();
   }
 
 
