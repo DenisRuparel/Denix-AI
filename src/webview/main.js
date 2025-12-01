@@ -48,8 +48,20 @@
     mentionSearchInput: document.getElementById('mention-search-input'),
     mentionSuggestions: document.getElementById('mention-suggestions'),
     atMenu: document.getElementById('at-menu'),
-    atMenuHeader: document.getElementById('at-menu-header'),
+    atMenuCurrentFile: document.getElementById('at-menu-current-file'),
+    atMenuSearchInput: document.getElementById('at-menu-search-input'),
+    atMenuContent: document.getElementById('at-menu-content'),
+    atMenuMain: document.getElementById('at-menu-main'),
     atMenuItems: document.getElementById('at-menu-items'),
+    atMenuHeader: null, // Deprecated - using atMenuCurrentFile instead
+    atMenuFiles: document.getElementById('at-menu-files'),
+    atMenuFilesList: document.getElementById('at-menu-files-list'),
+    atMenuFilesSearch: document.getElementById('at-menu-files-search'),
+    atMenuBackFiles: document.getElementById('at-menu-back-files'),
+    atMenuTerminals: document.getElementById('at-menu-terminals'),
+    atMenuTerminalsList: document.getElementById('at-menu-terminals-list'),
+    atMenuTerminalsSearch: document.getElementById('at-menu-terminals-search'),
+    atMenuBackTerminals: document.getElementById('at-menu-back-terminals'),
     memoriesBtn: document.getElementById('memories-btn'),
     selectionBtn: document.getElementById('selection-btn'),
     // autoBtn removed - using modern-toggle-switch instead
@@ -128,6 +140,12 @@
   // @ Menu state
   let atMenuItems = [];
   let selectedAtMenuIndex = -1;
+  let atMenuView = 'main'; // 'main' | 'files' | 'terminals'
+  let atMenuSearchTerm = '';
+  let contextChips = []; // Array of { type, id, label, path?, icon }
+  let filesList = [];
+  let terminalsList = [];
+  let filesSearchDebounce = null;
 
   // Panel state
   let currentSelectionContext = null;
@@ -426,22 +444,48 @@
     elements.messageInput?.addEventListener('keydown', (e) => {
       // Handle @ menu navigation when open
       if (isAtMenuOpen()) {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          navigateAtMenu(1);
-          return;
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          navigateAtMenu(-1);
-          return;
-        } else if (e.key === 'Enter') {
-          e.preventDefault();
-          selectAtMenuItem();
-          return;
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          hideAtMenu();
-          return;
+        // Handle submenu navigation
+        if (atMenuView === 'files' || atMenuView === 'terminals') {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            navigateSubmenu(1);
+            return;
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            navigateSubmenu(-1);
+            return;
+          } else if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            selectSubmenuItem();
+            return;
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            if (atMenuView !== 'main') {
+              showAtMenuView('main');
+            } else {
+              hideAtMenu();
+            }
+            return;
+          }
+        } else {
+          // Main menu navigation
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            navigateAtMenu(1);
+            return;
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            navigateAtMenu(-1);
+            return;
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            selectAtMenuItem();
+            return;
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            hideAtMenu();
+            return;
+          }
         }
       }
       
@@ -482,6 +526,63 @@
       }
     });
 
+    // @ Menu submenu back buttons
+    elements.atMenuBackFiles?.addEventListener('click', () => {
+      showAtMenuView('main');
+    });
+    
+    elements.atMenuBackTerminals?.addEventListener('click', () => {
+      showAtMenuView('main');
+    });
+    
+    // Submenu search inputs
+    elements.atMenuFilesSearch?.addEventListener('input', (e) => {
+      clearTimeout(filesSearchDebounce);
+      filesSearchDebounce = setTimeout(() => {
+        renderFilesList(filesList);
+      }, 200);
+    });
+    
+    elements.atMenuFilesSearch?.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (e.target.value) {
+          e.target.value = '';
+          renderFilesList(filesList);
+        } else {
+          showAtMenuView('main');
+        }
+      } else if (e.key === 'Backspace' && !e.target.value) {
+        showAtMenuView('main');
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedSubmenuIndex = 0;
+        navigateSubmenu(0);
+      }
+    });
+    
+    elements.atMenuTerminalsSearch?.addEventListener('input', (e) => {
+      renderTerminalsList(terminalsList);
+    });
+    
+    elements.atMenuTerminalsSearch?.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (e.target.value) {
+          e.target.value = '';
+          renderTerminalsList(terminalsList);
+        } else {
+          showAtMenuView('main');
+        }
+      } else if (e.key === 'Backspace' && !e.target.value) {
+        showAtMenuView('main');
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedSubmenuIndex = 0;
+        navigateSubmenu(0);
+      }
+    });
+    
     // Listen for messages from extension
     window.addEventListener('message', (event) => {
       const message = event.data;
@@ -544,6 +645,12 @@
         if (elements.selectionBtn?.matches(':hover') && currentSelectionContext) {
           showSelectionTooltip(currentSelectionContext);
         }
+        break;
+      case 'filesList':
+        renderFilesList(message.data || []);
+        break;
+      case 'terminalsList':
+        renderTerminalsList(message.data || []);
         break;
       default:
         console.log('Unknown message type:', message.type);
@@ -1668,39 +1775,50 @@
     // Close old mention picker if open
     hideMentionPicker(true);
     
+    // Reset to main view
+    atMenuView = 'main';
+    atMenuSearchTerm = '';
+    
     // Initialize menu items - exact match to screenshot
     atMenuItems = [
       { id: 'files', label: 'Files & Folders', icon: 'folder', token: '@files', hasChevron: true },
-      { id: 'docs', label: 'Docs', icon: 'file', token: '@docs', hasChevron: true },
       { id: 'terminals', label: 'Terminals', icon: 'terminal', token: '@terminals', hasChevron: true },
       { id: 'branch', label: 'Branch (Diff with Main)', icon: 'branch', token: '@branch', hasChevron: false },
       { id: 'browser', label: 'Browser', icon: 'browser', token: '@browser', hasChevron: false }
     ];
     
-    // Get current file context if available
-    const currentFile = state.currentFile;
-    if (currentFile) {
-      const fileName = currentFile.split('/').pop() || currentFile;
-      renderAtMenuHeader(fileName, currentFile);
-    } else {
-      elements.atMenuHeader.innerHTML = '';
+    // Render current file row
+    renderAtMenuCurrentFile();
+    
+    // Clear and setup search input
+    if (elements.atMenuSearchInput) {
+      elements.atMenuSearchInput.value = '';
+      elements.atMenuSearchInput.addEventListener('input', handleAtMenuSearch);
+      elements.atMenuSearchInput.addEventListener('keydown', handleAtMenuSearchKeydown);
     }
     
-    renderAtMenuItems();
+    // Show main menu, hide submenus
+    showAtMenuView('main');
+    
     // Position menu after rendering so we can get accurate height
     setTimeout(() => {
       positionAtMenu();
     }, 0);
+    
     elements.atMenu.classList.add('show');
     elements.atMenu.setAttribute('aria-hidden', 'false');
     selectedAtMenuIndex = 0;
     updateAtMenuSelection();
     
-    // Focus first item for keyboard navigation
+    // Focus search input for keyboard navigation
     setTimeout(() => {
-      const firstItem = elements.atMenuItems?.querySelector('.at-menu-item');
-      if (firstItem) {
-        firstItem.focus();
+      if (elements.atMenuSearchInput) {
+        elements.atMenuSearchInput.focus();
+      } else {
+        const firstItem = elements.atMenuItems?.querySelector('.at-menu-item');
+        if (firstItem) {
+          firstItem.focus();
+        }
       }
     }, 10);
   }
@@ -1710,6 +1828,129 @@
     elements.atMenu.classList.remove('show');
     elements.atMenu.setAttribute('aria-hidden', 'true');
     selectedAtMenuIndex = -1;
+    atMenuView = 'main';
+    atMenuSearchTerm = '';
+    
+    // Remove search input listeners
+    if (elements.atMenuSearchInput) {
+      elements.atMenuSearchInput.removeEventListener('input', handleAtMenuSearch);
+      elements.atMenuSearchInput.removeEventListener('keydown', handleAtMenuSearchKeydown);
+    }
+  }
+  
+  function showAtMenuView(view) {
+    if (!elements.atMenuMain || !elements.atMenuFiles || !elements.atMenuTerminals) return;
+    
+    // Hide all views
+    elements.atMenuMain.style.display = 'none';
+    elements.atMenuFiles.style.display = 'none';
+    elements.atMenuTerminals.style.display = 'none';
+    
+    // Show requested view
+    atMenuView = view;
+    switch(view) {
+      case 'main':
+        elements.atMenuMain.style.display = 'block';
+        renderAtMenuItems();
+        selectedAtMenuIndex = 0;
+        updateAtMenuSelection();
+        break;
+      case 'files':
+        elements.atMenuFiles.style.display = 'block';
+        loadFilesList();
+        selectedSubmenuIndex = -1;
+        setTimeout(() => {
+          if (elements.atMenuFilesSearch) {
+            elements.atMenuFilesSearch.focus();
+          }
+        }, 10);
+        break;
+      case 'terminals':
+        elements.atMenuTerminals.style.display = 'block';
+        loadTerminalsList();
+        selectedSubmenuIndex = -1;
+        setTimeout(() => {
+          if (elements.atMenuTerminalsSearch) {
+            elements.atMenuTerminalsSearch.focus();
+          }
+        }, 10);
+        break;
+    }
+  }
+  
+  function renderAtMenuCurrentFile() {
+    if (!elements.atMenuCurrentFile) return;
+    
+    const currentFile = state.currentFile;
+    if (!currentFile) {
+      elements.atMenuCurrentFile.innerHTML = '';
+      elements.atMenuCurrentFile.style.display = 'none';
+      return;
+    }
+    
+    elements.atMenuCurrentFile.style.display = 'block';
+    const fileName = currentFile.split(/[/\\]/).pop() || currentFile;
+    const pathParts = currentFile.split(/[/\\]/);
+    const relativePath = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : '';
+    const icon = getSvgIcon('file');
+    
+    elements.atMenuCurrentFile.innerHTML = `
+      <div class="at-menu-current-file-content" role="button" tabindex="0">
+        <div class="at-menu-current-file-icon">${icon}</div>
+        <div class="at-menu-current-file-text">
+          <span class="at-menu-current-file-name">${escapeHtml(fileName)}</span>
+          ${relativePath ? `<span class="at-menu-current-file-path">  ${escapeHtml(relativePath)}</span>` : ''}
+        </div>
+      </div>
+    `;
+    
+    // Add click handler to select current file
+    const currentFileBtn = elements.atMenuCurrentFile.querySelector('.at-menu-current-file-content');
+    if (currentFileBtn) {
+      currentFileBtn.addEventListener('click', () => {
+        addContextChip({
+          type: 'file',
+          id: currentFile,
+          label: fileName,
+          path: currentFile,
+          icon: 'file'
+        });
+        hideAtMenu();
+      });
+      
+      currentFileBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          currentFileBtn.click();
+        }
+      });
+    }
+  }
+  
+  function handleAtMenuSearch(e) {
+    atMenuSearchTerm = e.target.value.toLowerCase();
+    // Filter is applied when submenus are opened
+  }
+  
+  function handleAtMenuSearchKeydown(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (atMenuSearchTerm) {
+        atMenuSearchTerm = '';
+        if (elements.atMenuSearchInput) {
+          elements.atMenuSearchInput.value = '';
+        }
+      } else {
+        hideAtMenu();
+        elements.messageInput?.focus();
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const firstItem = elements.atMenuItems?.querySelector('.at-menu-item');
+      if (firstItem) {
+        firstItem.focus();
+      }
+    }
   }
 
   function positionAtMenu() {
@@ -1726,21 +1967,10 @@
     elements.atMenu.style.top = 'auto'; // Clear any top positioning
   }
 
+  // Deprecated - using renderAtMenuCurrentFile instead
   function renderAtMenuHeader(fileName, filePath) {
-    if (!elements.atMenuHeader) return;
-    const icon = getSvgIcon('file');
-    // Format: "style.css  src/webview" - filename and path on same line
-    const pathParts = filePath.split('/');
-    const relativePath = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : '';
-    elements.atMenuHeader.innerHTML = `
-      <div class="at-menu-header-content">
-        <div class="at-menu-header-icon">${icon}</div>
-        <div class="at-menu-header-text">
-          <span class="at-menu-header-name">${escapeHtml(fileName)}</span>
-          ${relativePath ? `<span class="at-menu-header-path">  ${escapeHtml(relativePath)}</span>` : ''}
-        </div>
-      </div>
-    `;
+    // This function is kept for backwards compatibility but is no longer used
+    // Current file is now rendered via renderAtMenuCurrentFile()
   }
 
   function renderAtMenuItems() {
@@ -1814,32 +2044,330 @@
     // Handle different menu item actions
     switch (item.id) {
       case 'files':
-        // TODO: Implement files & folders context selection
-        sendMessage({ type: 'command', data: { command: 'selectFilesContext' } });
-        break;
-      case 'docs':
-        // TODO: Implement docs context selection
-        sendMessage({ type: 'command', data: { command: 'selectDocsContext' } });
+        showAtMenuView('files');
         break;
       case 'terminals':
-        // TODO: Implement terminals context selection
-        sendMessage({ type: 'command', data: { command: 'selectTerminalsContext' } });
+        showAtMenuView('terminals');
         break;
       case 'branch':
-        // TODO: Implement branch diff context selection
-        sendMessage({ type: 'command', data: { command: 'selectBranchContext' } });
+        addContextChip({
+          type: 'branchDiff',
+          id: 'branch-diff-main',
+          label: 'Branch (Diff with Main)',
+          icon: 'branch'
+        });
+        hideAtMenu();
+        elements.messageInput?.focus();
         break;
       case 'browser':
-        // TODO: Implement browser context selection
-        sendMessage({ type: 'command', data: { command: 'selectBrowserContext' } });
+        addContextChip({
+          type: 'browser',
+          id: 'browser-current',
+          label: 'Browser',
+          icon: 'browser'
+        });
+        hideAtMenu();
+        elements.messageInput?.focus();
         break;
       default:
         insertMentionToken(item.token);
+        hideAtMenu();
+        elements.messageInput?.focus();
+    }
+  }
+  
+  // Submenu loading functions
+  function loadFilesList() {
+    sendMessage({ type: 'command', data: { command: 'getFilesList' } });
+  }
+  
+  function loadTerminalsList() {
+    sendMessage({ type: 'command', data: { command: 'getTerminalsList' } });
+  }
+  
+  function renderFilesList(files = []) {
+    if (!elements.atMenuFilesList) return;
+    
+    filesList = files;
+    const searchTerm = elements.atMenuFilesSearch?.value.toLowerCase() || '';
+    const filtered = files.filter(item => {
+      const name = (item.name || '').toLowerCase();
+      const path = (item.path || '').toLowerCase();
+      return name.includes(searchTerm) || path.includes(searchTerm);
+    });
+    
+    if (filtered.length === 0) {
+      elements.atMenuFilesList.innerHTML = '<div class="at-menu-empty">No results</div>';
+      return;
     }
     
-    hideAtMenu();
-    // Return focus to input
-    elements.messageInput?.focus();
+    let html = '';
+    filtered.forEach((item, index) => {
+      const icon = item.type === 'folder' ? getSvgIcon('folder') : getSvgIcon('file');
+      const isSelected = contextChips.some(chip => chip.id === item.path && chip.type === item.type);
+      html += `
+        <button class="at-menu-submenu-item ${isSelected ? 'selected' : ''}" 
+                data-type="${item.type}" 
+                data-path="${escapeHtml(item.path)}" 
+                data-index="${index}"
+                role="menuitemcheckbox"
+                aria-checked="${isSelected}">
+          <div class="at-menu-submenu-item-icon">${icon}</div>
+          <div class="at-menu-submenu-item-label">
+            <div class="at-menu-submenu-item-name">${escapeHtml(item.name)}</div>
+            ${item.path ? `<div class="at-menu-submenu-item-path">${escapeHtml(item.path)}</div>` : ''}
+          </div>
+        </button>
+      `;
+    });
+    
+    elements.atMenuFilesList.innerHTML = html;
+    
+    // Add click handlers
+    elements.atMenuFilesList.querySelectorAll('.at-menu-submenu-item').forEach((btn, index) => {
+      btn.setAttribute('data-index', index.toString());
+      btn.addEventListener('click', () => {
+        const type = btn.getAttribute('data-type');
+        const path = btn.getAttribute('data-path');
+        const name = btn.querySelector('.at-menu-submenu-item-name')?.textContent || path;
+        toggleFileContext({ type, path, name });
+      });
+    });
+  }
+  
+  function renderTerminalsList(terminals = []) {
+    if (!elements.atMenuTerminalsList) return;
+    
+    terminalsList = terminals;
+    const searchTerm = elements.atMenuTerminalsSearch?.value.toLowerCase() || '';
+    const filtered = terminals.filter(term => {
+      const name = (term.name || '').toLowerCase();
+      return name.includes(searchTerm);
+    });
+    
+    let html = '';
+    filtered.forEach((term, index) => {
+      const isSelected = contextChips.some(chip => chip.id === term.id && chip.type === 'terminal');
+      html += `
+        <button class="at-menu-submenu-item ${isSelected ? 'selected' : ''}" 
+                data-term-id="${term.id}" 
+                data-index="${index}"
+                role="menuitemcheckbox"
+                aria-checked="${isSelected}">
+          <div class="at-menu-submenu-item-icon">${getSvgIcon('terminal')}</div>
+          <div class="at-menu-submenu-item-label">
+            <div class="at-menu-submenu-item-name">${escapeHtml(term.name)}</div>
+          </div>
+        </button>
+      `;
+    });
+    
+    // Add "Add new terminal" button
+    html += `
+      <button class="at-menu-submenu-item at-menu-add-terminal" data-action="add-terminal">
+        <div class="at-menu-submenu-item-icon">${getSvgIcon('file')}</div>
+        <div class="at-menu-submenu-item-label">
+          <div class="at-menu-submenu-item-name">+ Add new terminal</div>
+        </div>
+      </button>
+    `;
+    
+    elements.atMenuTerminalsList.innerHTML = html;
+    
+    // Add click handlers
+    elements.atMenuTerminalsList.querySelectorAll('.at-menu-submenu-item').forEach((btn, index) => {
+      btn.setAttribute('data-index', index.toString());
+      btn.addEventListener('click', () => {
+        if (btn.getAttribute('data-action') === 'add-terminal') {
+          addNewTerminal();
+        } else {
+          const termId = btn.getAttribute('data-term-id');
+          const term = terminals.find(t => t.id === termId);
+          if (term) {
+            toggleTerminalContext(term);
+          }
+        }
+      });
+    });
+  }
+  
+  // Context chip management
+  function addContextChip(chip) {
+    // Check if already exists
+    if (contextChips.some(c => c.id === chip.id && c.type === chip.type)) {
+      return;
+    }
+    
+    contextChips.push(chip);
+    renderContextChips();
+    
+    // Notify extension
+    sendMessage({ 
+      type: 'command', 
+      data: { 
+        command: 'addContextChip', 
+        chip: chip 
+      } 
+    });
+  }
+  
+  function removeContextChip(chipId, chipType) {
+    contextChips = contextChips.filter(c => !(c.id === chipId && c.type === chipType));
+    renderContextChips();
+    
+    // Notify extension
+    sendMessage({ 
+      type: 'command', 
+      data: { 
+        command: 'removeContextChip', 
+        chipId: chipId,
+        chipType: chipType
+      } 
+    });
+  }
+  
+  function toggleFileContext(file) {
+    const existing = contextChips.find(c => c.id === file.path && c.type === file.type);
+    if (existing) {
+      removeContextChip(file.path, file.type);
+    } else {
+      addContextChip({
+        type: file.type,
+        id: file.path,
+        label: file.name,
+        path: file.path,
+        icon: file.type === 'folder' ? 'folder' : 'file'
+      });
+    }
+    // Re-render to update selection state
+    renderFilesList(filesList);
+  }
+  
+  function toggleTerminalContext(term) {
+    const existing = contextChips.find(c => c.id === term.id && c.type === 'terminal');
+    if (existing) {
+      removeContextChip(term.id, 'terminal');
+    } else {
+      addContextChip({
+        type: 'terminal',
+        id: term.id,
+        label: term.name,
+        icon: 'terminal'
+      });
+    }
+    renderTerminalsList(terminalsList);
+  }
+  
+  function addNewTerminal() {
+    sendMessage({ type: 'command', data: { command: 'createTerminal' } });
+  }
+  
+  function renderContextChips() {
+    if (!elements.contextPills) return;
+    
+    // Clear existing chips (keep other context pills)
+    const existingChips = elements.contextPills.querySelectorAll('.context-chip-at-menu');
+    existingChips.forEach(chip => chip.remove());
+    
+    // Add new chips
+    contextChips.forEach(chip => {
+      const chipEl = document.createElement('div');
+      chipEl.className = 'context-pill context-chip-at-menu';
+      chipEl.setAttribute('data-chip-id', chip.id);
+      chipEl.setAttribute('data-chip-type', chip.type);
+      
+      const icon = getSvgIcon(chip.icon || 'file');
+      chipEl.innerHTML = `
+        <div class="context-chip-icon">${icon}</div>
+        <span class="context-chip-label">${escapeHtml(chip.label)}</span>
+        <button class="context-chip-remove" aria-label="Remove ${escapeHtml(chip.label)}" tabindex="0">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 3L9 9M9 3L3 9"/>
+          </svg>
+        </button>
+      `;
+      
+      const removeBtn = chipEl.querySelector('.context-chip-remove');
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeContextChip(chip.id, chip.type);
+      });
+      
+      removeBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          removeBtn.click();
+        }
+      });
+      
+      elements.contextPills.appendChild(chipEl);
+    });
+  }
+  
+  // Submenu navigation
+  let selectedSubmenuIndex = -1;
+  
+  function navigateSubmenu(direction) {
+    let items;
+    if (atMenuView === 'files') {
+      items = elements.atMenuFilesList?.querySelectorAll('.at-menu-submenu-item:not(.at-menu-add-terminal)');
+    } else if (atMenuView === 'terminals') {
+      items = elements.atMenuTerminalsList?.querySelectorAll('.at-menu-submenu-item');
+    } else {
+      return;
+    }
+    
+    if (!items || items.length === 0) return;
+    
+    selectedSubmenuIndex += direction;
+    if (selectedSubmenuIndex < 0) {
+      selectedSubmenuIndex = items.length - 1;
+    } else if (selectedSubmenuIndex >= items.length) {
+      selectedSubmenuIndex = 0;
+    }
+    
+    updateSubmenuSelection();
+  }
+  
+  function updateSubmenuSelection() {
+    let items;
+    if (atMenuView === 'files') {
+      items = elements.atMenuFilesList?.querySelectorAll('.at-menu-submenu-item:not(.at-menu-add-terminal)');
+    } else if (atMenuView === 'terminals') {
+      items = elements.atMenuTerminalsList?.querySelectorAll('.at-menu-submenu-item');
+    } else {
+      return;
+    }
+    
+    if (!items) return;
+    
+    items.forEach((item, index) => {
+      if (index === selectedSubmenuIndex) {
+        item.classList.add('selected');
+        item.setAttribute('tabindex', '0');
+        item.focus();
+        item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        item.classList.remove('selected');
+        item.setAttribute('tabindex', '-1');
+      }
+    });
+  }
+  
+  function selectSubmenuItem() {
+    let items;
+    if (atMenuView === 'files') {
+      items = elements.atMenuFilesList?.querySelectorAll('.at-menu-submenu-item:not(.at-menu-add-terminal)');
+    } else if (atMenuView === 'terminals') {
+      items = elements.atMenuTerminalsList?.querySelectorAll('.at-menu-submenu-item');
+    } else {
+      return;
+    }
+    
+    if (!items || selectedSubmenuIndex < 0 || selectedSubmenuIndex >= items.length) return;
+    
+    const item = items[selectedSubmenuIndex];
+    item.click();
   }
 
 

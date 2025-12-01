@@ -48,7 +48,8 @@ export interface WebviewMessage {
         'initialize' | 'updateState' | 'error' | 'typingIndicator' | 
         'getCurrentPrompt' | 'currentPrompt' | 'dismissContext' | 'enhancedPrompt' |
         'getMentionItems' | 'mentionItems' | 'insertMention' | 'memoriesContent' |
-        'guidelinesContent' | 'rulesList' | 'getSelection' | 'selectionData';
+        'guidelinesContent' | 'rulesList' | 'getSelection' | 'selectionData' |
+        'filesList' | 'terminalsList' | 'contextChips';
   data?: any;
   payload?: any;
 }
@@ -461,8 +462,47 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               ></textarea>
               <!-- Custom @ Menu -->
               <div class="at-menu" id="at-menu" role="menu" aria-hidden="true">
-                <div class="at-menu-header" id="at-menu-header"></div>
-                <div class="at-menu-items" id="at-menu-items"></div>
+                <!-- Current file row -->
+                <div class="at-menu-current-file" id="at-menu-current-file"></div>
+                <!-- Search input -->
+                <div class="at-menu-search-wrapper">
+                  <input type="text" class="at-menu-search-input" id="at-menu-search-input" placeholder="Add files, folders, terminals…" autocomplete="off" aria-label="Search context items" />
+                </div>
+                <!-- Menu content (main menu or submenu) -->
+                <div class="at-menu-content" id="at-menu-content">
+                  <div class="at-menu-main" id="at-menu-main">
+                    <div class="at-menu-items" id="at-menu-items"></div>
+                  </div>
+                  <!-- Submenu views -->
+                  <div class="at-menu-submenu at-menu-files" id="at-menu-files" style="display: none;">
+                    <div class="at-menu-submenu-header">
+                      <button class="at-menu-back-btn" id="at-menu-back-files" aria-label="Back">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <path d="M10 12L6 8L10 4"/>
+                        </svg>
+                      </button>
+                      <input type="text" class="at-menu-submenu-search" id="at-menu-files-search" placeholder="Search files and folders…" autocomplete="off" />
+                    </div>
+                    <div class="at-menu-submenu-section">
+                      <div class="at-menu-submenu-title">Files & Folders</div>
+                      <div class="at-menu-submenu-list" id="at-menu-files-list"></div>
+                    </div>
+                  </div>
+                  <div class="at-menu-submenu at-menu-terminals" id="at-menu-terminals" style="display: none;">
+                    <div class="at-menu-submenu-header">
+                      <button class="at-menu-back-btn" id="at-menu-back-terminals" aria-label="Back">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <path d="M10 12L6 8L10 4"/>
+                        </svg>
+                      </button>
+                      <input type="text" class="at-menu-submenu-search" id="at-menu-terminals-search" placeholder="Search terminals…" autocomplete="off" />
+                    </div>
+                    <div class="at-menu-submenu-section">
+                      <div class="at-menu-submenu-title">Terminals</div>
+                      <div class="at-menu-submenu-list" id="at-menu-terminals-list"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             
@@ -1212,6 +1252,35 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this._importThread();
         break;
 
+      case 'getFilesList':
+        // Get workspace files and folders
+        await this._handleGetFilesList();
+        break;
+
+      case 'getTerminalsList':
+        // Get VS Code terminals
+        await this._handleGetTerminalsList();
+        break;
+
+      case 'addContextChip':
+        // Add context chip
+        if (data.payload?.chip) {
+          await this._handleAddContextChip(data.payload.chip);
+        }
+        break;
+
+      case 'removeContextChip':
+        // Remove context chip
+        if (data.payload?.chipId && data.payload?.chipType) {
+          await this._handleRemoveContextChip(data.payload.chipId, data.payload.chipType);
+        }
+        break;
+
+      case 'createTerminal':
+        // Create new terminal
+        await this._handleCreateTerminal();
+        break;
+
       default:
         console.warn('Unknown command:', data.command);
     }
@@ -1317,6 +1386,215 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
 
   /**
+   * Handle get files list command
+   */
+  private async _handleGetFilesList(): Promise<void> {
+    try {
+      const files: Array<{ type: 'file' | 'folder'; name: string; path: string }> = [];
+      
+      if (this._workspaceRoot) {
+        // Get files and folders from workspace
+        const filesList = await this._getWorkspaceFiles(this._workspaceRoot);
+        files.push(...filesList);
+      }
+      
+      this._sendMessageToWebview({
+        type: 'filesList',
+        data: files
+      });
+    } catch (error: any) {
+      console.error('Error getting files list:', error);
+      this._sendMessageToWebview({
+        type: 'filesList',
+        data: []
+      });
+    }
+  }
+
+  /**
+   * Get workspace files recursively
+   */
+  private async _getWorkspaceFiles(rootPath: string, maxDepth: number = 3, currentDepth: number = 0): Promise<Array<{ type: 'file' | 'folder'; name: string; path: string }>> {
+    const files: Array<{ type: 'file' | 'folder'; name: string; path: string }> = [];
+    
+    if (currentDepth >= maxDepth) {
+      return files;
+    }
+
+    try {
+      const entries = await fs.promises.readdir(rootPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        // Skip hidden files and common ignore patterns
+        if (entry.name.startsWith('.') || 
+            entry.name === 'node_modules' || 
+            entry.name === 'dist' || 
+            entry.name === 'build') {
+          continue;
+        }
+
+        const fullPath = path.join(rootPath, entry.name);
+        const relativePath = path.relative(this._workspaceRoot || '', fullPath);
+
+        if (entry.isDirectory()) {
+          files.push({
+            type: 'folder',
+            name: entry.name,
+            path: relativePath
+          });
+          
+          // Recursively get subdirectories (limited depth)
+          if (currentDepth < maxDepth - 1) {
+            const subFiles = await this._getWorkspaceFiles(fullPath, maxDepth, currentDepth + 1);
+            files.push(...subFiles);
+          }
+        } else {
+          files.push({
+            type: 'file',
+            name: entry.name,
+            path: relativePath
+          });
+        }
+      }
+    } catch (error) {
+      // Ignore permission errors
+      console.warn(`Error reading directory ${rootPath}:`, error);
+    }
+
+    return files;
+  }
+
+  /**
+   * Handle get terminals list command
+   */
+  private async _handleGetTerminalsList(): Promise<void> {
+    try {
+      const terminals = vscode.window.terminals.map((term, index) => ({
+        id: `terminal-${index}`,
+        name: term.name || `Terminal ${index + 1}`,
+        terminal: term
+      }));
+
+      this._sendMessageToWebview({
+        type: 'terminalsList',
+        data: terminals
+      });
+    } catch (error: any) {
+      console.error('Error getting terminals list:', error);
+      this._sendMessageToWebview({
+        type: 'terminalsList',
+        data: []
+      });
+    }
+  }
+
+  /**
+   * Handle add context chip
+   */
+  private async _handleAddContextChip(chip: { type: string; id: string; label: string; path?: string; icon?: string }): Promise<void> {
+    // Add to attachments if it's a file or folder
+    if (chip.type === 'file' || chip.type === 'folder') {
+      if (chip.path && this._workspaceRoot) {
+        const fullPath = path.isAbsolute(chip.path) 
+          ? chip.path 
+          : path.join(this._workspaceRoot, chip.path);
+        
+        try {
+          const stats = await fs.promises.stat(fullPath);
+          if (stats.isFile()) {
+            this._handleFileAttach({ path: fullPath });
+          } else if (stats.isDirectory()) {
+            // For folders, we could add all files or just mark it
+            // For now, just add as a folder reference
+            const existingIndex = this._state.attachments.findIndex(
+              att => att.path === fullPath && att.type === 'file'
+            );
+            if (existingIndex < 0) {
+              this._state.attachments.push({
+                id: `folder-${chip.id}`,
+                type: 'file',
+                path: fullPath,
+                name: chip.label,
+                description: `Folder: ${chip.path}`
+              });
+              this._saveState();
+              this._updateWebviewState();
+            }
+          }
+        } catch (error) {
+          console.warn(`Error adding context chip for ${chip.path}:`, error);
+        }
+      }
+    } else if (chip.type === 'doc') {
+      // Add documentation reference
+      const existingIndex = this._state.attachments.findIndex(
+        att => att.id === chip.id && att.type === 'file'
+      );
+      if (existingIndex < 0) {
+        this._state.attachments.push({
+          id: chip.id,
+          type: 'file',
+          name: chip.label,
+          description: `Documentation: ${chip.label}`
+        });
+        this._saveState();
+        this._updateWebviewState();
+      }
+    } else if (chip.type === 'terminal') {
+      // Terminal context is handled separately
+      // Could store terminal ID for reference
+    } else if (chip.type === 'branchDiff') {
+      // Branch diff context
+      this._state.attachments.push({
+        id: chip.id,
+        type: 'file',
+        name: chip.label,
+        description: 'Git branch diff with main'
+      });
+      this._saveState();
+      this._updateWebviewState();
+    } else if (chip.type === 'browser') {
+      // Browser context
+      this._state.attachments.push({
+        id: chip.id,
+        type: 'file',
+        name: chip.label,
+        description: 'Browser page context'
+      });
+      this._saveState();
+      this._updateWebviewState();
+    }
+  }
+
+  /**
+   * Handle remove context chip
+   */
+  private async _handleRemoveContextChip(chipId: string, chipType: string): Promise<void> {
+    // Remove from attachments
+    this._state.attachments = this._state.attachments.filter(
+      att => !(att.id === chipId || (att.path && att.path.includes(chipId)))
+    );
+    this._saveState();
+    this._updateWebviewState();
+  }
+
+  /**
+   * Handle create terminal
+   */
+  private async _handleCreateTerminal(): Promise<void> {
+    try {
+      const terminal = vscode.window.createTerminal();
+      terminal.show();
+      
+      // Send updated terminals list
+      await this._handleGetTerminalsList();
+    } catch (error: any) {
+      console.error('Error creating terminal:', error);
+      vscode.window.showErrorMessage(`Failed to create terminal: ${error.message}`);
+    }
+  }
+
+  /**
    * Update context attachments from memories, rules, selection
    */
   private async _updateContextAttachments(): Promise<void> {
@@ -1375,7 +1653,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       keywords.push(...words.filter(w => w.length > 4));
     }
     
-    return [...new Set(keywords)];
+    return Array.from(new Set(keywords));
   }
 
   /**
