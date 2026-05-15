@@ -1819,7 +1819,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   public async openHelp(): Promise<void> {
     // Open help documentation or show help dialog
-    const helpUrl = 'https://github.com/yourusername/denix-ai#readme';
+    const helpUrl = 'https://github.com/DenisRuparel/Denix-AI/blob/master/README.md';
     await vscode.env.openExternal(vscode.Uri.parse(helpUrl));
   }
 
