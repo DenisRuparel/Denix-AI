@@ -699,6 +699,12 @@
   // Update state and UI
   function updateState(newState) {
     state = { ...state, ...newState };
+    // Sync selection context from state whenever state is updated
+    if (newState.selectionContext !== undefined) {
+      updateSelectionContext(newState.selectionContext);
+    } else if (newState.hasSelection === false) {
+      updateSelectionContext(null);
+    }
     renderMessages();
     renderAttachments();
     loadThreadHistory();
@@ -1060,6 +1066,13 @@
         const shortName = modelName.length > 6 ? modelName.substring(0, 6) + '...' : modelName;
         modelNameEl.textContent = shortName;
       }
+    }
+
+    // Update selection button state based on state
+    if (elements.selectionBtn) {
+      const hasSelection = !!(state.selectionContext && state.selectionContext.text);
+      elements.selectionBtn.disabled = !hasSelection;
+      elements.selectionBtn.classList.toggle('disabled', !hasSelection);
     }
 
     // Update send button state
@@ -2513,78 +2526,7 @@
     }
   }
 
-  function showSelectionTooltip(selection) {
-    if (!selection || !selection.text || !elements.selectionBtn) return;
-    
-    hideSelectionTooltip();
-    
-    const tooltip = document.createElement('div');
-    tooltip.className = 'selection-tooltip show';
-    
-    const startLine = selection.startLine || 1;
-    const endLine = selection.endLine || startLine;
-    const lines = selection.text ? selection.text.split('\n') : [''];
-    
-    const lineNumbersHtml = lines
-      .map((_, idx) => `<div class="selection-line-number">${startLine + idx}</div>`)
-      .join('');
-    
-    const codeHtml = lines
-      .map(line => `<div class="selection-code-line">${highlightCodeLine(line)}</div>`)
-      .join('');
-    
-    tooltip.innerHTML = `
-      <div class="selection-tooltip-header">
-        <span class="selection-file">${escapeHtml(selection.fileName || 'Selected Text')}</span>
-        <span class="selection-range">Lines ${startLine}${endLine !== startLine ? `-${endLine}` : ''}</span>
-      </div>
-      <div class="selection-preview">
-        <div class="selection-code-container">
-          <div class="selection-line-numbers">${lineNumbersHtml}</div>
-          <div class="selection-code-content">${codeHtml}</div>
-        </div>
-      </div>
-    `;
-    
-    document.body.appendChild(tooltip);
-    
-    const buttonRect = elements.selectionBtn.getBoundingClientRect();
-    const tooltipRect = tooltip.getBoundingClientRect();
-    let top = buttonRect.top - tooltipRect.height - 8;
-    if (top < 12) {
-      top = buttonRect.bottom + 8;
-    }
-    let left = buttonRect.left + buttonRect.width / 2 - tooltipRect.width / 2;
-    left = Math.max(12, Math.min(left, window.innerWidth - tooltipRect.width - 12));
-    
-    tooltip.style.top = `${top}px`;
-    tooltip.style.left = `${left}px`;
-    
-    selectionTooltipEl = tooltip;
-    
-    // Keep tooltip open when hovering over it
-    tooltip.addEventListener('mouseenter', () => {
-      if (selectionHoverTimer) {
-        clearTimeout(selectionHoverTimer);
-        selectionHoverTimer = null;
-      }
-    });
-    
-    tooltip.addEventListener('mouseleave', () => {
-      hideSelectionTooltip();
-    });
-  }
-
-  function hideSelectionTooltip() {
-    if (selectionTooltipEl) {
-      selectionTooltipEl.remove();
-      selectionTooltipEl = null;
-    }
-    if (selectionHoverTimer) {
-      clearTimeout(selectionHoverTimer);
-      selectionHoverTimer = null;
-    }
-  }
+  // (duplicate functions removed — the canonical showSelectionTooltip and hideSelectionTooltip are defined above)
 
   function escapeHtml(text) {
     const div = document.createElement('div');
