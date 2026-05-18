@@ -92,7 +92,8 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('denix-ai.enhancePrompt', () => provider.enhanceCurrentPrompt()),
     vscode.commands.registerCommand('denix-ai.clearContext', () => provider.clearContextAttachments()),
     vscode.commands.registerCommand('denix-ai.toggleAuto', () => provider.toggleAutoMode()),
-    vscode.commands.registerCommand('denix-ai.changeModel', () => provider.selectModel())
+    vscode.commands.registerCommand('denix-ai.changeModel', () => provider.selectModel()),
+    vscode.commands.registerCommand('denix-ai.getThreadsCount', () => provider.getThreadsCount())
   );
 
   // Selection watcher

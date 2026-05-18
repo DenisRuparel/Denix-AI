@@ -95,6 +95,29 @@
           element.value = message.value;
         }
       }
+    } else if (message.type === 'updateStats') {
+      const titleEl = document.querySelector('.project-title');
+      if (titleEl && message.stats.projectName) {
+        titleEl.textContent = message.stats.projectName;
+      }
+
+      const statValues = document.querySelectorAll('.stat-value');
+      if (statValues.length >= 2) {
+        if (message.stats.files !== undefined) statValues[0].textContent = message.stats.files;
+        if (message.stats.threads !== undefined) statValues[1].textContent = message.stats.threads;
+      }
+
+      const progressBar = document.querySelector('.progress-bar');
+      const legend = document.querySelector('.legend');
+      if (progressBar && legend && message.stats.languages) {
+        progressBar.innerHTML = message.stats.languages.map(l => 
+          `<div class="segment" style="width: ${l.percentage}%; background-color: ${l.color}; border-right: 2px solid var(--bg-card);"></div>`
+        ).join('');
+        
+        legend.innerHTML = message.stats.languages.map(l => 
+          `<div class="legend-item" style="background: ${l.color}33; color: ${l.color};">${l.name} ${l.percentage.toFixed(1)}%</div>`
+        ).join('');
+      }
     }
   });
 

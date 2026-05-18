@@ -1420,7 +1420,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _saveState(): void {
     this._context.globalState.update('denix-ai-state', this._state);
     // Persist the active thread snapshot so the sidebar can list it
-    void this._persistCurrentThreadSnapshot();
+    this._persistCurrentThreadSnapshot().catch(console.error);
+  }
+
+  public async getThreadsCount(): Promise<number> {
+    const index = await this._getThreadIndex();
+    return index.length;
   }
 
   /**
@@ -1441,7 +1446,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ? this._state.messages[this._state.messages.length - 1].timestamp
         : Date.now();
 
-      await this._addOrUpdateThreadIndexEntry(threadId, threadTitle, pinned, lastTimestamp);
+      // Only add to index if the thread has actual content
+      // This prevents the fallback empty thread created after deletion from artificially inflating the thread count
+      if (this._state.messages.length > 0 || this._state.attachments.length > 0) {
+        await this._addOrUpdateThreadIndexEntry(threadId, threadTitle, pinned, lastTimestamp);
+      }
     } catch (error) {
       console.error('Failed to persist current thread snapshot:', error);
     }
@@ -2040,6 +2049,11 @@ Make it:
   }
 
   public createNewThread(): void {
+    // Prevent creating multiple empty threads
+    if (this._state.messages.length === 0 && this._state.attachments.length === 0) {
+      return;
+    }
+
     this._state.threadId = `thread-${Date.now()}`;
     this._state.messages = [];
     this._state.attachments = [];
@@ -2063,6 +2077,7 @@ Make it:
 
   private async _saveThreadIndex(index: Array<{ id: string; title: string; timestamp: number; pinned?: boolean }>): Promise<void> {
     await this._context.workspaceState.update('threads-index', index);
+    vscode.commands.executeCommand('denix-ai.refreshSettingsStats').then(undefined, () => {});
   }
 
   private async _addOrUpdateThreadIndexEntry(threadId: string, title?: string, pinned: boolean = false, timestamp?: number): Promise<void> {
@@ -2425,4 +2440,3 @@ Make it:
     this._disposables.forEach(d => d.dispose());
   }
 }
-
