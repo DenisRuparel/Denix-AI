@@ -104,6 +104,13 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(editor => {
+      selectionWatcher.updateFromEditor(editor);
+      provider.handleSelectionChanged();
+    })
+  );
+
   // Update selection immediately if editor already open
   selectionWatcher.updateFromEditor(vscode.window.activeTextEditor);
 }

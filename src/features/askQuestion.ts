@@ -18,6 +18,11 @@ export class QuickQuestionService {
   public buildPrompt(templateId: string, prompt: string): string {
     const template = this.getTemplates().find(t => t.id === templateId);
     if (template && prompt) {
+      const trimmedTemplate = template.prompt.trim();
+      const trimmedPrompt = prompt.trim();
+      if (trimmedPrompt === trimmedTemplate) {
+        return template.prompt;
+      }
       return `${template.prompt}\n\n${prompt}`;
     }
     return template ? template.prompt : prompt;

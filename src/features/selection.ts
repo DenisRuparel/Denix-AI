@@ -21,32 +21,44 @@ export class SelectionWatcher {
 
   public updateFromEditor(editor: vscode.TextEditor | undefined): void {
     if (!editor) {
-      this.currentSelection = null;
-      return;
-    }
-
-    const selection = editor.selection;
-    if (selection.isEmpty) {
-      this.currentSelection = null;
+      // Keep last known selection context when focus changes to a Webview or non-text editor
       return;
     }
 
     const document = editor.document;
-    const text = document.getText(selection);
-    const startLine = selection.start.line + 1;
-    const endLine = selection.end.line + 1;
+    if (document.uri.scheme !== 'file') {
+      return;
+    }
+
+    const selection = editor.selection;
     const uri = document.uri.fsPath;
     const fileName = path.basename(uri);
     const relativePath = this.workspaceRoot ? path.relative(this.workspaceRoot, uri) : fileName;
 
-    this.currentSelection = {
-      uri,
-      fileName,
-      relativePath,
-      text,
-      startLine,
-      endLine
-    };
+    if (selection.isEmpty) {
+      // Fallback: If selection is empty, treat the entire document as the selection
+      const text = document.getText();
+      this.currentSelection = {
+        uri,
+        fileName,
+        relativePath,
+        text,
+        startLine: 1,
+        endLine: document.lineCount
+      };
+    } else {
+      const text = document.getText(selection);
+      const startLine = selection.start.line + 1;
+      const endLine = selection.end.line + 1;
+      this.currentSelection = {
+        uri,
+        fileName,
+        relativePath,
+        text,
+        startLine,
+        endLine
+      };
+    }
   }
 
   public getSelection(): SelectionContext | null {
