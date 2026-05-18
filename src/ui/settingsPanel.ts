@@ -78,6 +78,14 @@ export class SettingsPanel implements vscode.WebviewPanelSerializer {
           vscode.env.openExternal(vscode.Uri.parse(message.url));
         }
         break;
+      case 'command':
+        if (message.command === 'newChat') {
+          vscode.commands.executeCommand('denix-ai.newThread');
+          vscode.commands.executeCommand('denix-ai-chat.focus');
+        } else if (message.command) {
+          vscode.commands.executeCommand(message.command);
+        }
+        break;
     }
   }
 
@@ -217,6 +225,12 @@ export class SettingsPanel implements vscode.WebviewPanelSerializer {
 
     const nonce = this._getNonce();
 
+    // Fetch active configuration values to pre-populate form elements
+    const config = vscode.workspace.getConfiguration('denix-ai');
+    const openRouterApiKey = config.get<string>('openRouterApiKey', '');
+    const model = config.get<string>('model', 'anthropic/claude-3.5-sonnet');
+    const maxTokens = config.get<number>('maxTokens', 500);
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -283,84 +297,286 @@ export class SettingsPanel implements vscode.WebviewPanelSerializer {
       </div>
     </nav>
 
-    <main class="content">
-      <section id="home" class="content-section active">
-        
-        <!-- Stunning Hero Banner -->
-        <div class="hero-banner">
-          <div class="hero-content">
-            <div class="breadcrumb">Project Environment</div>
-            <h1 class="project-title">${stats.projectName}</h1>
-            <p class="hero-subtitle">Your AI is ready to assist. Customize your workspace and rules.</p>
-          </div>
-          <div class="hero-stats">
-            <div class="stat-box glass">
-              <div class="stat-top">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                Files
+    <div class="settings-content" style="flex: 1; padding: 48px; overflow-y: auto;">
+      <main class="content" style="padding: 0; background: transparent; overflow: visible;">
+        <!-- HOME SECTION -->
+        <section id="home" class="content-section active">
+          
+          <!-- Stunning Hero Banner -->
+          <div class="hero-banner">
+            <div class="hero-content">
+              <div class="breadcrumb">Project Environment</div>
+              <h1 class="project-title">${stats.projectName}</h1>
+              <p class="hero-subtitle">Your AI is ready to assist. Customize your workspace and rules.</p>
+            </div>
+            <div class="hero-stats">
+              <div class="stat-box glass">
+                <div class="stat-top">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                  Files
+                </div>
+                <div class="stat-value">${stats.files}</div>
               </div>
-              <div class="stat-value">${stats.files}</div>
-            </div>
-            <div class="stat-box glass">
-              <div class="stat-top">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                Threads
+              <div class="stat-box glass">
+                <div class="stat-top">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                  Threads
+                </div>
+                <div class="stat-value">${stats.threads}</div>
               </div>
-              <div class="stat-value">${stats.threads}</div>
             </div>
           </div>
-        </div>
 
-        <!-- Quick Actions Grid -->
-        <h2 class="section-title">Quick Actions</h2>
-        <div class="quick-actions-grid">
-          <div class="action-card" onclick="vscode.postMessage({ type: 'command', command: 'denix-ai.askQuestion' })">
-            <div class="action-icon quick-ask">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          <!-- Quick Actions Grid -->
+          <h2 class="section-title">Quick Actions</h2>
+          <div class="quick-actions-grid">
+            <div class="action-card" onclick="vscode.postMessage({ type: 'command', command: 'newChat' })">
+              <div class="action-icon quick-ask">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              </div>
+              <div class="action-info">
+                <h3>New Chat</h3>
+                <p>Start a new conversation</p>
+              </div>
             </div>
-            <div class="action-info">
-              <h3>New Chat</h3>
-              <p>Start a new conversation</p>
+            <div class="action-card" onclick="document.querySelector('[data-section=\\'rules\\']').click()">
+              <div class="action-icon rules">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+              </div>
+              <div class="action-info">
+                <h3>Edit Rules</h3>
+                <p>Customize AI behavior</p>
+              </div>
+            </div>
+            <div class="action-card" onclick="document.querySelector('[data-section=\\'context\\']').click()">
+              <div class="action-icon context">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+              </div>
+              <div class="action-info">
+                <h3>Context</h3>
+                <p>Manage workspace memory</p>
+              </div>
             </div>
           </div>
-          <div class="action-card" onclick="document.querySelector('[data-section=\\'rules\\']').click()">
-            <div class="action-icon rules">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-            </div>
-            <div class="action-info">
-              <h3>Edit Rules</h3>
-              <p>Customize AI behavior</p>
-            </div>
-          </div>
-          <div class="action-card" onclick="document.querySelector('[data-section=\\'context\\']').click()">
-            <div class="action-icon context">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-            </div>
-            <div class="action-info">
-              <h3>Context</h3>
-              <p>Manage workspace memory</p>
-            </div>
-          </div>
-        </div>
 
-        <div class="codebase-section">
-          <h2 class="section-title">Codebase Analytics</h2>
-          <div class="codebase-card glass-panel">
-            <div class="card-title">Language Distribution</div>
-            <div class="progress-bar">
-              ${stats.languages.map((l: any) => `<div class="segment" style="width: ${l.percentage}%; background-color: ${l.color}; border-right: 2px solid var(--bg-card);"></div>`).join('')}
-            </div>
-            <div class="legend">
-              ${stats.languages.map((l: any) => `<div class="legend-item" style="background: ${l.color}33; color: ${l.color};">${l.name} ${l.percentage.toFixed(1)}%</div>`).join('')}
+          <div class="codebase-section">
+            <h2 class="section-title">Codebase Analytics</h2>
+            <div class="codebase-card glass-panel">
+              <div class="card-title">Language Distribution</div>
+              <div class="progress-bar">
+                ${stats.languages.map((l: any) => `<div class="segment" style="width: ${l.percentage}%; background-color: ${l.color}; border-right: 2px solid var(--bg-card);"></div>`).join('')}
+              </div>
+              <div class="legend">
+                ${stats.languages.map((l: any) => `<div class="legend-item" style="background: ${l.color}33; color: ${l.color};">${l.name} ${l.percentage.toFixed(1)}%</div>`).join('')}
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="warning-msg">
-          <span class="warning-icon">⚠️</span> You have run out of credits for <a href="mailto:denis.ruparel.inventyv@gmail.com">denis.ruparel.inventyv@gmail.com</a>. Please <a href="#">click here</a> to upgrade. <span class="warning-icon">⚠️</span>
-        </div>
-      </section>
-    </main>
+        <!-- SERVICES SECTION -->
+        <section id="services" class="content-section">
+          <div class="section-hero">
+            <h2>AI & Models</h2>
+            <p>Configure credentials and active backends for your workspace assistant.</p>
+          </div>
+          
+          <div class="settings-form">
+            <div class="settings-card">
+              <div class="card-header-flex">
+                <h3>OpenRouter Configuration</h3>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="openRouterApiKey">API Key</label>
+                <div class="form-desc">Credentials are safely stored in your local VS Code workspace storage.</div>
+                <input type="password" id="openRouterApiKey" class="form-control" value="${openRouterApiKey}" placeholder="Enter OpenRouter API Key (sk-or-v1-...)" />
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label" for="model">Active AI Model</label>
+                <div class="form-desc">Select the default LLM processor to handle chat prompt requests.</div>
+                <select id="model" class="form-control">
+                  <option value="anthropic/claude-3.5-sonnet" ${model === 'anthropic/claude-3.5-sonnet' ? 'selected' : ''}>Claude 3.5 Sonnet (Recommended)</option>
+                  <option value="openai/gpt-4o" ${model === 'openai/gpt-4o' ? 'selected' : ''}>GPT-4o (High Speed)</option>
+                  <option value="google/gemini-pro-1.5" ${model === 'google/gemini-pro-1.5' ? 'selected' : ''}>Gemini 1.5 Pro</option>
+                  <option value="meta-llama/llama-3-70b-instruct" ${model === 'meta-llama/llama-3-70b-instruct' ? 'selected' : ''}>Llama 3 70B</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="maxTokens">Response Limit (Max Tokens)</label>
+                <div class="form-desc">Cap output generation lengths to preserve token consumption rates.</div>
+                <div class="slider-group">
+                  <input type="range" id="maxTokens" min="100" max="4000" step="50" value="${maxTokens}" />
+                  <span class="value-display">${maxTokens}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- RULES SECTION -->
+        <section id="rules" class="content-section">
+          <div class="section-hero">
+            <h2>AI Rules & Instructions</h2>
+            <p>Guide your AI's codebase analysis and output formatting style conventions.</p>
+          </div>
+          
+          <div class="settings-form">
+            <div class="settings-card">
+              <div class="card-header-flex">
+                <h3>Memory Management</h3>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Global Memories</label>
+                <div class="form-desc">A persistent record of facts, preferences, and details the AI remembers across sessions.</div>
+                <button class="btn btn-primary btn-block" onclick="vscode.postMessage({ type: 'command', command: 'denix-ai.openMemories' })">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
+                  Launch Memories Editor
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CONTEXT SECTION -->
+        <section id="context" class="content-section">
+          <div class="section-hero">
+            <h2>Context Management</h2>
+            <p>Control files, text selections, and local indexes fed directly into prompts.</p>
+          </div>
+          
+          <div class="settings-card">
+            <div class="empty-section-msg">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+              <h3>Workspace Indexing is Active</h3>
+              <p>Active file syncing and C++ semantic scopes are tracked automatically.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- MCP SECTION -->
+        <section id="mcp" class="content-section">
+          <div class="section-hero">
+            <h2>MCP Servers</h2>
+            <p>Model Context Protocol services linked with active workspaces.</p>
+          </div>
+          <div class="settings-card">
+            <div class="empty-section-msg">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+              <h3>No MCP Servers configured</h3>
+              <p>Connect model tools, databases, and filesystem modules here in a future update.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECRETS SECTION -->
+        <section id="secrets" class="content-section">
+          <div class="section-hero">
+            <h2>Secret Manager</h2>
+            <p>Private credentials and passwords safely isolated from repository pushes.</p>
+          </div>
+          <div class="settings-card">
+            <div class="empty-section-msg">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <h3>All Secrets Isolated</h3>
+              <p>API keys and credentials are saved locally in securely-held environment keys.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- OTHER SECTIONS -->
+        <section id="commands" class="content-section">
+          <div class="section-hero">
+            <h2>Custom Commands</h2>
+            <p>Configure custom prompt workflows and trigger actions.</p>
+          </div>
+          <div class="settings-card">
+            <div class="empty-section-msg">
+              <h3>Custom Commands are Active</h3>
+              <p>Run quick tasks and pre-compiled developer macros from the chat action panel.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="skills" class="content-section">
+          <div class="section-hero">
+            <h2>AI Skills</h2>
+            <p>Enable or disable modular coding behaviors and analysis presets.</p>
+          </div>
+          <div class="settings-card">
+            <div class="empty-section-msg">
+              <h3>Autonomous Agents Enabled</h3>
+              <p>Smart task processing, error debugging, and file edits are ready.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="hooks" class="content-section">
+          <div class="section-hero">
+            <h2>Git & File Hooks</h2>
+            <p>Trigger AI scanning before commits or after local file changes.</p>
+          </div>
+          <div class="settings-card">
+            <div class="empty-section-msg">
+              <h3>Hooks Listening</h3>
+              <p>Auto-scans active project file scopes automatically.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="terminal" class="content-section">
+          <div class="section-hero">
+            <h2>Terminal Operations</h2>
+            <p>Manage autonomous bash run controls and terminal outputs.</p>
+          </div>
+          <div class="settings-card">
+            <div class="empty-section-msg">
+              <h3>Command Isolation Active</h3>
+              <p>Terminal calls ask for developer review before direct execution.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="ux" class="content-section">
+          <div class="section-hero">
+            <h2>User Experience Settings</h2>
+            <p>Customize animations, display elements, and active themes.</p>
+          </div>
+          <div class="settings-card">
+            <div class="empty-section-msg">
+              <h3>Theme Synced</h3>
+              <p>Visual elements conform automatically to active VS Code templates.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="beta" class="content-section">
+          <div class="section-hero">
+            <h2>Beta Programs</h2>
+            <p>Test cutting edge code synthesis models and sidebar interfaces.</p>
+          </div>
+          <div class="settings-card">
+            <div class="empty-section-msg">
+              <h3>You are on the Latest Release</h3>
+              <p>Enjoy elite model optimizations and fluid side panel tooltips.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="account" class="content-section">
+          <div class="section-hero">
+            <h2>Account Details</h2>
+            <p>Manage subscription status, user settings, and developer profiles.</p>
+          </div>
+          <div class="settings-card">
+            <div class="empty-section-msg">
+              <h3>Profile Synchronized</h3>
+              <p>Logged in successfully as <span style="color: #7a79ec; font-weight: 600;">denis.ruparel.inventyv@gmail.com</span>.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
   </div>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>

@@ -3,6 +3,7 @@
   'use strict';
 
   const vscode = acquireVsCodeApi();
+  window.vscode = vscode;
   
   // Initialize
   document.addEventListener('DOMContentLoaded', () => {
