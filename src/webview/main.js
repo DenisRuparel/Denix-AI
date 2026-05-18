@@ -144,6 +144,7 @@
   let atMenuSearchTerm = '';
   let contextChips = []; // Array of { type, id, label, path?, icon }
   let filesList = [];
+  let currentBrowsingDir = '';
   let terminalsList = [];
   let filesSearchDebounce = null;
 
@@ -200,6 +201,38 @@
 
   // Setup event listeners
   function setupEventListeners() {
+    const input = elements.messageInput;
+    if (input) {
+      // Define value getter and setter
+      Object.defineProperty(input, 'value', {
+        get() {
+          // Exclude inline chips to get pure text content
+          const clone = this.cloneNode(true);
+          clone.querySelectorAll('.inline-chip').forEach(chip => chip.remove());
+          return clone.innerText;
+        },
+        set(val) {
+          this.innerText = val;
+        },
+        configurable: true
+      });
+
+      // Define selectionStart and selectionEnd
+      Object.defineProperty(input, 'selectionStart', {
+        get() {
+          return getCaretCharacterOffsetWithin(this);
+        },
+        configurable: true
+      });
+
+      Object.defineProperty(input, 'selectionEnd', {
+        get() {
+          return getCaretCharacterOffsetWithin(this);
+        },
+        configurable: true
+      });
+    }
+
     // Header buttons
     elements.hamburgerBtn?.addEventListener('click', () => {
       toggleThreadsPanel();
@@ -534,9 +567,6 @@
         if (!elements.sendBtn?.disabled) {
           sendUserMessage();
         }
-      } else if (e.key === '@' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault(); // Prevent VS Code default menu
-        // Menu will be shown by input event handler
       } else if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         clearAllAttachments();
@@ -567,7 +597,17 @@
 
     // @ Menu submenu back buttons
     elements.atMenuBackFiles?.addEventListener('click', () => {
-      showAtMenuView('main');
+      if (currentBrowsingDir !== '') {
+        const lastSlash = currentBrowsingDir.lastIndexOf('/');
+        if (lastSlash === -1) {
+          currentBrowsingDir = '';
+        } else {
+          currentBrowsingDir = currentBrowsingDir.substring(0, lastSlash);
+        }
+        renderFilesList(filesList);
+      } else {
+        showAtMenuView('main');
+      }
     });
     
     elements.atMenuBackTerminals?.addEventListener('click', () => {
@@ -1108,7 +1148,32 @@
     if (!input) return;
 
     const content = input.value.trim();
-    if (!content && state.attachments.length === 0) {
+    
+    // Extract inline chips from the input field
+    const inlineChips = [];
+    input.querySelectorAll('.inline-chip').forEach(chipEl => {
+      inlineChips.push({
+        type: chipEl.getAttribute('data-type'),
+        id: chipEl.getAttribute('data-path'),
+        path: chipEl.getAttribute('data-path'),
+        name: chipEl.getAttribute('data-name')
+      });
+    });
+
+    // Combine them with other attachments
+    const allAttachments = [...state.attachments];
+    inlineChips.forEach(chip => {
+      if (!allAttachments.some(a => a.path === chip.path && a.type === chip.type)) {
+        allAttachments.push({
+          id: chip.id,
+          type: chip.type,
+          path: chip.path,
+          name: chip.name
+        });
+      }
+    });
+
+    if (!content && allAttachments.length === 0) {
       return;
     }
 
@@ -1120,13 +1185,12 @@
       type: 'userMessage',
       data: {
         content,
-        attachments: [...state.attachments]
+        attachments: allAttachments
       }
     });
 
     // Clear input
-    input.value = '';
-    input.style.height = 'auto';
+    input.innerHTML = '';
     updateSendButtonState();
   }
 
@@ -1847,6 +1911,10 @@
     atMenuView = 'main';
     atMenuSearchTerm = '';
     
+    // Preload files and terminals for instant global search!
+    loadFilesList();
+    loadTerminalsList();
+    
     // Initialize menu items - exact match to screenshot
     atMenuItems = [
       { id: 'files', label: 'Files & Folders', icon: 'folder', token: '@files', hasChevron: true },
@@ -1914,6 +1982,12 @@
     elements.atMenuFiles.style.display = 'none';
     elements.atMenuTerminals.style.display = 'none';
     
+    // Hide main search input wrapper in submenus
+    const searchWrapper = elements.atMenuSearchInput?.parentElement;
+    if (searchWrapper) {
+      searchWrapper.style.display = view === 'main' ? 'block' : 'none';
+    }
+    
     // Show requested view
     atMenuView = view;
     switch(view) {
@@ -1925,6 +1999,7 @@
         break;
       case 'files':
         elements.atMenuFiles.style.display = 'block';
+        currentBrowsingDir = '';
         loadFilesList();
         selectedSubmenuIndex = -1;
         setTimeout(() => {
@@ -1997,7 +2072,7 @@
   
   function handleAtMenuSearch(e) {
     atMenuSearchTerm = e.target.value.toLowerCase();
-    // Filter is applied when submenus are opened
+    renderAtMenuItems();
   }
   
   function handleAtMenuSearchKeydown(e) {
@@ -2008,6 +2083,7 @@
         if (elements.atMenuSearchInput) {
           elements.atMenuSearchInput.value = '';
         }
+        renderAtMenuItems();
       } else {
         hideAtMenu();
         elements.messageInput?.focus();
@@ -2022,17 +2098,12 @@
   }
 
   function positionAtMenu() {
-    if (!elements.atMenu || !elements.mentionBtn) return;
-    const btnRect = elements.mentionBtn.getBoundingClientRect();
-    const wrapperRect = elements.mentionBtn.closest('.input-wrapper')?.getBoundingClientRect();
-    if (!wrapperRect) return;
-    
-    // Position above the @ icon button using bottom positioning
-    // Calculate distance from button top to wrapper bottom
-    const distanceFromBottom = wrapperRect.bottom - btnRect.top;
-    elements.atMenu.style.bottom = `${distanceFromBottom + 4}px`;
-    elements.atMenu.style.left = `${btnRect.left - wrapperRect.left}px`;
-    elements.atMenu.style.top = 'auto'; // Clear any top positioning
+    if (!elements.atMenu) return;
+    elements.atMenu.style.left = '12px';
+    elements.atMenu.style.right = '12px';
+    elements.atMenu.style.width = 'calc(100% - 24px)';
+    elements.atMenu.style.bottom = '100%';
+    elements.atMenu.style.top = 'auto';
   }
 
   // Deprecated - using renderAtMenuCurrentFile instead
@@ -2044,15 +2115,80 @@
   function renderAtMenuItems() {
     if (!elements.atMenuItems) return;
     
+    let displayedItems = [];
+    if (!atMenuSearchTerm) {
+      displayedItems = [
+        { id: 'files', label: 'Files & Folders', icon: 'folder', token: '@files', hasChevron: true },
+        { id: 'terminals', label: 'Terminals', icon: 'terminal', token: '@terminals', hasChevron: true },
+        { id: 'branch', label: 'Branch (Diff with Main)', icon: 'branch', token: '@branch', hasChevron: false },
+        { id: 'browser', label: 'Browser', icon: 'browser', token: '@browser', hasChevron: false }
+      ];
+    } else {
+      // 1. Files & Folders match
+      const matchingFiles = filesList.filter(item => 
+        (item.name || '').toLowerCase().includes(atMenuSearchTerm) ||
+        (item.path || '').toLowerCase().includes(atMenuSearchTerm)
+      );
+      matchingFiles.slice(0, 15).forEach(item => {
+        const isSelected = isChipActive(item.path, item.type);
+        displayedItems.push({
+          id: item.path,
+          type: item.type === 'folder' ? 'folder' : 'file',
+          label: item.name,
+          description: item.path,
+          icon: item.type === 'folder' ? 'folder' : 'file',
+          isSelected: isSelected,
+          hasChevron: false
+        });
+      });
+      
+      // 2. Terminals match
+      const matchingTerminals = terminalsList.filter(item => 
+        (item.name || '').toLowerCase().includes(atMenuSearchTerm)
+      );
+      matchingTerminals.slice(0, 5).forEach(item => {
+        const isSelected = isChipActive(item.id, 'terminal');
+        displayedItems.push({
+          id: item.id,
+          type: 'terminal',
+          label: item.name,
+          description: 'Terminal Output',
+          icon: 'terminal',
+          isSelected: isSelected,
+          hasChevron: false
+        });
+      });
+      
+      // 3. Static categories match (e.g. branch, browser, files, terminals)
+      const categories = [
+        { id: 'branch', label: 'Branch (Diff with Main)', icon: 'branch', token: '@branch', hasChevron: false },
+        { id: 'browser', label: 'Browser', icon: 'browser', token: '@browser', hasChevron: false }
+      ];
+      categories.forEach(cat => {
+        if (cat.label.toLowerCase().includes(atMenuSearchTerm)) {
+          displayedItems.push(cat);
+        }
+      });
+    }
+    
+    // Assign to global atMenuItems for seamless indexing
+    atMenuItems = displayedItems;
+    
     let html = '';
     atMenuItems.forEach((item, index) => {
       const icon = getSvgIcon(item.icon);
-      const chevron = item.hasChevron ? '<div class="at-menu-item-chevron">></div>' : '';
+      const chevron = item.hasChevron ? '<div class="at-menu-item-chevron"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12l4-4-4-4"/></svg></div>' : '';
+      const isChipSelected = item.isSelected ? '<div class="at-menu-item-selected-dot">✓</div>' : '';
       const tabIndex = index === 0 ? 'tabindex="0"' : 'tabindex="-1"';
+      
       html += `
-        <button class="at-menu-item" data-index="${index}" role="menuitem" ${tabIndex}>
+        <button class="at-menu-item ${item.isSelected ? 'chip-attached' : ''}" data-index="${index}" role="menuitem" ${tabIndex}>
           <div class="at-menu-item-icon">${icon}</div>
-          <div class="at-menu-item-label">${escapeHtml(item.label)}</div>
+          <div class="at-menu-item-label-container" style="display: flex; flex-direction: column; align-items: flex-start; flex-grow: 1; text-align: left; overflow: hidden;">
+            <div class="at-menu-item-label" style="font-weight: 500; font-size: 13px;">${escapeHtml(item.label)}</div>
+            ${item.description ? `<div class="at-menu-item-desc" style="font-size: 11px; opacity: 0.6; font-weight: 400; text-align: left; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; margin-top: 1px;">${escapeHtml(item.description)}</div>` : ''}
+          </div>
+          ${isChipSelected}
           ${chevron}
         </button>
       `;
@@ -2063,7 +2199,8 @@
     // Add click handlers
     const items = elements.atMenuItems.querySelectorAll('.at-menu-item');
     items.forEach(item => {
-      item.addEventListener('click', () => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent bubbling up to document and closing
         const index = Number(item.getAttribute('data-index'));
         selectAtMenuItem(index);
       });
@@ -2138,9 +2275,21 @@
         elements.messageInput?.focus();
         break;
       default:
-        insertMentionToken(item.token);
-        hideAtMenu();
-        elements.messageInput?.focus();
+        // This is a dynamic search result!
+        if (item.type === 'file' || item.type === 'folder') {
+          toggleFileContext({ type: item.type, path: item.id, name: item.label });
+          hideAtMenu();
+          elements.messageInput?.focus();
+        } else if (item.type === 'terminal') {
+          toggleTerminalContext({ id: item.id, name: item.label });
+          hideAtMenu();
+          elements.messageInput?.focus();
+        } else {
+          insertMentionToken(item.token);
+          hideAtMenu();
+          elements.messageInput?.focus();
+        }
+        break;
     }
   }
   
@@ -2153,26 +2302,123 @@
     sendMessage({ type: 'command', data: { command: 'getTerminalsList' } });
   }
   
+  function normalizePath(p) {
+    if (!p) return '';
+    return p.replace(/\\/g, '/').replace(/^\//, '').replace(/\/$/, '');
+  }
+
+  function pathsMatch(pathA, pathB) {
+    if (!pathA || !pathB) return false;
+    const normA = normalizePath(pathA);
+    const normB = normalizePath(pathB);
+    if (normA === normB) return true;
+    if (normA.endsWith('/' + normB) || normB.endsWith('/' + normA)) {
+      return true;
+    }
+    return false;
+  }
+
+  function isDirectChild(itemPath, currentDir) {
+    const normPath = normalizePath(itemPath);
+    const normDir = normalizePath(currentDir);
+    const parent = getParentDir(normPath);
+    return parent === normDir;
+  }
+  
+  function getParentDir(itemPath) {
+    const norm = normalizePath(itemPath);
+    const lastSlash = norm.lastIndexOf('/');
+    if (lastSlash === -1) return '';
+    return norm.substring(0, lastSlash);
+  }
+  
   function renderFilesList(files = []) {
     if (!elements.atMenuFilesList) return;
     
     filesList = files;
     const searchTerm = elements.atMenuFilesSearch?.value.toLowerCase() || '';
-    const filtered = files.filter(item => {
-      const name = (item.name || '').toLowerCase();
-      const path = (item.path || '').toLowerCase();
-      return name.includes(searchTerm) || path.includes(searchTerm);
-    });
+    
+    // Update breadcrumb title
+    const titleEl = document.querySelector('.at-menu-files .at-menu-submenu-title');
+    if (titleEl) {
+      if (searchTerm) {
+        titleEl.textContent = 'Search Results';
+      } else if (currentBrowsingDir) {
+        // Build interactive breadcrumbs
+        const parts = currentBrowsingDir.split('/');
+        let html = '<span class="breadcrumb-item" data-path="" style="cursor: pointer; text-decoration: underline;">Files & Folders</span>';
+        let cumulativePath = '';
+        parts.forEach(part => {
+          cumulativePath = cumulativePath ? `${cumulativePath}/${part}` : part;
+          html += ` <span class="at-menu-breadcrumb-sep">/</span> <span class="breadcrumb-item" data-path="${escapeHtml(cumulativePath)}" style="cursor: pointer; text-decoration: underline;">${escapeHtml(part)}</span>`;
+        });
+        titleEl.innerHTML = html;
+        
+        // Add click events to breadcrumbs
+        titleEl.querySelectorAll('.breadcrumb-item').forEach(el => {
+          el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            currentBrowsingDir = el.getAttribute('data-path') || '';
+            renderFilesList(filesList);
+          });
+        });
+      } else {
+        titleEl.textContent = 'Files & Folders';
+      }
+    }
+    
+    let filtered = [];
+    if (searchTerm) {
+      filtered = files.filter(item => {
+        const name = (item.name || '').toLowerCase();
+        const path = (item.path || '').toLowerCase();
+        return name.includes(searchTerm) || path.includes(searchTerm);
+      });
+    } else {
+      filtered = files.filter(item => {
+        return isDirectChild(item.path, currentBrowsingDir);
+      });
+    }
     
     if (filtered.length === 0) {
-      elements.atMenuFilesList.innerHTML = '<div class="at-menu-empty">No results</div>';
+      elements.atMenuFilesList.innerHTML = '<div class="at-menu-empty">No files or folders found</div>';
       return;
     }
     
     let html = '';
+    
+    // If not searching and inside a directory, add a "Go up" row
+    if (!searchTerm && currentBrowsingDir) {
+      html += `
+        <button class="at-menu-submenu-item at-menu-go-up" data-action="go-up" role="menuitem" style="opacity: 0.85; font-style: italic;">
+          <div class="at-menu-submenu-item-icon">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 12L6 8l4-4"/>
+            </svg>
+          </div>
+          <div class="at-menu-submenu-item-label">
+            <div class="at-menu-submenu-item-name">.. (Go Up)</div>
+          </div>
+        </button>
+      `;
+    }
+    
     filtered.forEach((item, index) => {
       const icon = item.type === 'folder' ? getSvgIcon('folder') : getSvgIcon('file');
-      const isSelected = contextChips.some(chip => chip.id === item.path && chip.type === item.type);
+      const isSelected = contextChips.some(chip => pathsMatch(chip.id, item.path) && chip.type === item.type)
+                         || state.attachments.some(att => pathsMatch(att.path, item.path) && att.type === item.type);
+      
+      let folderNavIcon = '';
+      if (item.type === 'folder') {
+        folderNavIcon = `
+          <div class="at-menu-submenu-folder-nav" title="Explore folder" style="margin-left: auto; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; color: var(--text-secondary); opacity: 0.7;">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 12l4-4-4-4"/>
+            </svg>
+          </div>
+        `;
+      }
+      
       html += `
         <button class="at-menu-submenu-item ${isSelected ? 'selected' : ''}" 
                 data-type="${item.type}" 
@@ -2183,8 +2429,9 @@
           <div class="at-menu-submenu-item-icon">${icon}</div>
           <div class="at-menu-submenu-item-label">
             <div class="at-menu-submenu-item-name">${escapeHtml(item.name)}</div>
-            ${item.path ? `<div class="at-menu-submenu-item-path">${escapeHtml(item.path)}</div>` : ''}
+            ${item.path && searchTerm ? `<div class="at-menu-submenu-item-path">${escapeHtml(item.path)}</div>` : ''}
           </div>
+          ${folderNavIcon}
         </button>
       `;
     });
@@ -2192,13 +2439,37 @@
     elements.atMenuFilesList.innerHTML = html;
     
     // Add click handlers
-    elements.atMenuFilesList.querySelectorAll('.at-menu-submenu-item').forEach((btn, index) => {
-      btn.setAttribute('data-index', index.toString());
-      btn.addEventListener('click', () => {
+    elements.atMenuFilesList.querySelectorAll('.at-menu-submenu-item').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent click from bubbling up and closing the menu!
+        
+        const action = btn.getAttribute('data-action');
+        if (action === 'go-up') {
+          const lastSlash = currentBrowsingDir.lastIndexOf('/');
+          if (lastSlash === -1) {
+            currentBrowsingDir = '';
+          } else {
+            currentBrowsingDir = currentBrowsingDir.substring(0, lastSlash);
+          }
+          renderFilesList(filesList);
+          elements.atMenuFilesSearch?.focus();
+          return;
+        }
+        
         const type = btn.getAttribute('data-type');
         const path = btn.getAttribute('data-path');
         const name = btn.querySelector('.at-menu-submenu-item-name')?.textContent || path;
-        toggleFileContext({ type, path, name });
+        
+        // If clicking a folder (and not clicking the specific attach sub-action), explore it!
+        if (type === 'folder') {
+          currentBrowsingDir = path;
+          renderFilesList(filesList);
+          elements.atMenuFilesSearch?.focus();
+        } else {
+          toggleFileContext({ type, path, name });
+          // Focus back on textarea/search input to continue typing seamlessly
+          elements.atMenuFilesSearch?.focus();
+        }
       });
     });
   }
@@ -2294,35 +2565,188 @@
     });
   }
   
-  function toggleFileContext(file) {
-    const existing = contextChips.find(c => c.id === file.path && c.type === file.type);
+  function isChipActive(path, type) {
+    const input = elements.messageInput;
+    if (!input) return false;
+    return !!input.querySelector(`.inline-chip[data-path="${path}"][data-type="${type}"]`);
+  }
+
+  function getCaretCharacterOffsetWithin(element) {
+    let caretOffset = 0;
+    const doc = element.ownerDocument || element.document;
+    const win = doc.defaultView || doc.parentWindow;
+    const sel = win.getSelection();
+    if (sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const preCaretRange = range.cloneRange();
+      preCaretRange.selectNodeContents(element);
+      preCaretRange.setEnd(range.endContainer, range.endOffset);
+      caretOffset = preCaretRange.toString().length;
+    }
+    return caretOffset;
+  }
+
+  function insertInlineChip(chip) {
+    const input = elements.messageInput;
+    if (!input) return;
+    
+    // Focus the input
+    input.focus();
+    
+    // If the selection is not inside the input, place selection at the end
+    const sel = window.getSelection();
+    let range = null;
+    
+    if (sel.rangeCount > 0) {
+      const currentRange = sel.getRangeAt(0);
+      if (input.contains(currentRange.startContainer)) {
+        range = currentRange;
+      }
+    }
+    
+    if (!range) {
+      range = document.createRange();
+      range.selectNodeContents(input);
+      range.collapse(false); // Move to end
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    
+    // Check if the chip is already in the messageInput (avoid duplicates)
+    const existing = input.querySelector(`.inline-chip[data-path="${chip.path || chip.id}"][data-type="${chip.type}"]`);
     if (existing) {
-      removeContextChip(file.path, file.type);
+      return;
+    }
+    
+    // Delete any "@" character and search text before the caret position
+    const offset = getCaretCharacterOffsetWithin(input);
+    const text = input.innerText;
+    const textBefore = text.substring(0, offset);
+    const atIndex = textBefore.lastIndexOf('@');
+    
+    if (atIndex !== -1) {
+      // Find the text node where caret is located and delete the text starting from @
+      const rangeToDelete = document.createRange();
+      let charCount = 0;
+      let startNode = null;
+      let startOffset = 0;
+      
+      const traverse = (node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const nextCount = charCount + node.length;
+          if (startNode === null && atIndex >= charCount && atIndex <= nextCount) {
+            startNode = node;
+            startOffset = atIndex - charCount;
+          }
+          charCount = nextCount;
+        } else {
+          for (let i = 0; i < node.childNodes.length; i++) {
+            traverse(node.childNodes[i]);
+          }
+        }
+      };
+      
+      traverse(input);
+      
+      if (startNode) {
+        rangeToDelete.setStart(startNode, startOffset);
+        rangeToDelete.setEnd(range.startContainer, range.startOffset);
+        rangeToDelete.deleteContents();
+      }
+    }
+    
+    // Create the chip element
+    const chipEl = document.createElement('span');
+    chipEl.className = 'inline-chip';
+    chipEl.setAttribute('contenteditable', 'false');
+    chipEl.setAttribute('data-type', chip.type);
+    chipEl.setAttribute('data-path', chip.path || chip.id);
+    chipEl.setAttribute('data-name', chip.label);
+    
+    let icon = '📄';
+    if (chip.type === 'folder') icon = '📁';
+    else if (chip.type === 'terminal') icon = '🐚';
+    else if (chip.type === 'browser') icon = '🌐';
+    else if (chip.type === 'branchDiff') icon = '🌿';
+    
+    // Check if image file
+    const ext = (chip.label || '').split('.').pop().toLowerCase();
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) {
+      icon = '🖼️';
+      chipEl.classList.add('image-chip');
+    }
+    
+    chipEl.innerHTML = `
+      <span class="inline-chip-icon">${icon}</span>
+      <span class="inline-chip-label">${escapeHtml(chip.label)}</span>
+      <span class="inline-chip-remove" onclick="this.parentElement.remove();">×</span>
+    `;
+    
+    // Re-get the selection range as the DOM might have changed slightly
+    const newSel = window.getSelection();
+    if (newSel.rangeCount > 0) {
+      const newRange = newSel.getRangeAt(0);
+      newRange.insertNode(chipEl);
+      
+      // Insert a space after the chip
+      const spaceNode = document.createTextNode(' ');
+      newRange.collapse(false);
+      newRange.insertNode(spaceNode);
+      
+      // Move caret after the space
+      newRange.setStartAfter(spaceNode);
+      newRange.setEndAfter(spaceNode);
+      newSel.removeAllRanges();
+      newSel.addRange(newRange);
+    }
+    
+    // Notify the backend extension
+    sendMessage({
+      type: 'command',
+      data: {
+        command: 'addContextChip',
+        chipId: chip.id || chip.path,
+        chipType: chip.type,
+        chipLabel: chip.label,
+        chipPath: chip.path
+      }
+    });
+  }
+
+  function toggleFileContext(file) {
+    const existing = isChipActive(file.path, file.type);
+    const input = elements.messageInput;
+    if (existing && input) {
+      const chipEl = input.querySelector(`.inline-chip[data-path="${file.path}"][data-type="${file.type}"]`);
+      chipEl?.remove();
     } else {
-      addContextChip({
+      insertInlineChip({
         type: file.type,
         id: file.path,
         label: file.name,
-        path: file.path,
-        icon: file.type === 'folder' ? 'folder' : 'file'
+        path: file.path
       });
     }
-    // Re-render to update selection state
+    hideAtMenu();
+    elements.messageInput?.focus();
     renderFilesList(filesList);
   }
-  
+
   function toggleTerminalContext(term) {
-    const existing = contextChips.find(c => c.id === term.id && c.type === 'terminal');
-    if (existing) {
-      removeContextChip(term.id, 'terminal');
+    const existing = isChipActive(term.id, 'terminal');
+    const input = elements.messageInput;
+    if (existing && input) {
+      const chipEl = input.querySelector(`.inline-chip[data-path="${term.id}"][data-type="terminal"]`);
+      chipEl?.remove();
     } else {
-      addContextChip({
+      insertInlineChip({
         type: 'terminal',
         id: term.id,
-        label: term.name,
-        icon: 'terminal'
+        label: term.name
       });
     }
+    hideAtMenu();
+    elements.messageInput?.focus();
     renderTerminalsList(terminalsList);
   }
   

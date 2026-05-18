@@ -503,12 +503,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             
             <!-- Middle: Text Input Area -->
             <div class="input-wrapper">
-              <textarea 
+              <div 
                 id="message-input" 
+                contenteditable="true"
                 placeholder="Instruct your Denix agent"
-                rows="1"
                 aria-label="Message input"
-              ></textarea>
+                role="textbox"
+                aria-multiline="true"
+              ></div>
               <!-- Custom @ Menu -->
               <div class="at-menu" id="at-menu" role="menu" aria-hidden="true">
                 <!-- Current file row -->
