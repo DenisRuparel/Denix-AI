@@ -696,6 +696,8 @@
         break;
       case 'typingIndicator':
         showTypingIndicator(message.data.active);
+        state.isGenerating = message.data.active;
+        updateGeneratingUI();
         break;
       case 'previewImage':
         showImageModal(message.data.src);
@@ -1133,14 +1135,22 @@
     if (!input || !sendBtn) return;
 
     const hasContent = input.value.trim().length > 0;
-    const hasAttachments = state.attachments.length > 0;
+    const hasInlineChips = input.querySelectorAll('.inline-chip').length > 0;
+    const hasAttachments = state.attachments.length > 0 || hasInlineChips;
 
     if (hasContent || hasAttachments) {
       sendBtn.disabled = false;
+      sendBtn.style.opacity = '1';
+      sendBtn.style.pointerEvents = 'auto';
     } else {
       sendBtn.disabled = true;
+      sendBtn.style.opacity = '0.5';
+      sendBtn.style.pointerEvents = 'none';
     }
   }
+  
+  // Expose to window for the onclick chip removal helper
+  window.updateSendBtn = updateSendButtonState;
 
   // Send user message
   function sendUserMessage() {
@@ -2679,7 +2689,7 @@
     chipEl.innerHTML = `
       <span class="inline-chip-icon">${icon}</span>
       <span class="inline-chip-label">${escapeHtml(chip.label)}</span>
-      <span class="inline-chip-remove" onclick="this.parentElement.remove();">×</span>
+      <span class="inline-chip-remove" onclick="this.parentElement.remove(); window.updateSendBtn();">×</span>
     `;
     
     // Re-get the selection range as the DOM might have changed slightly
@@ -2711,6 +2721,9 @@
         chipPath: chip.path
       }
     });
+
+    // Update send button state
+    updateSendButtonState();
   }
 
   function toggleFileContext(file) {
@@ -2719,6 +2732,7 @@
     if (existing && input) {
       const chipEl = input.querySelector(`.inline-chip[data-path="${file.path}"][data-type="${file.type}"]`);
       chipEl?.remove();
+      updateSendButtonState();
     } else {
       insertInlineChip({
         type: file.type,
@@ -2738,6 +2752,7 @@
     if (existing && input) {
       const chipEl = input.querySelector(`.inline-chip[data-path="${term.id}"][data-type="terminal"]`);
       chipEl?.remove();
+      updateSendButtonState();
     } else {
       insertInlineChip({
         type: 'terminal',

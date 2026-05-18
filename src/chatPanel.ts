@@ -963,6 +963,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
 
+      // Automatically route image extensions to _handleImageAttach for base64 loading and thumbnail rendering
+      const ext = path.extname(filePath).toLowerCase();
+      if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext)) {
+        await this._handleImageAttach({ path: filePath });
+        return;
+      }
+
       // Read file content
       const fileContent = fs.readFileSync(filePath, 'utf8');
       const fileName = path.basename(filePath);
