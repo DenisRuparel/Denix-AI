@@ -1,0 +1,8 @@
+[2026-05-18T12:05:44.716Z] _updateActiveFile called. currentFile: undefined, state.currentFile: null, attachments: []
+[2026-05-18T12:06:11.913Z] _updateActiveFile called. currentFile: undefined, state.currentFile: null, attachments: []
+[2026-05-18T12:07:03.717Z] _updateActiveFile called. currentFile: undefined, state.currentFile: null, attachments: []
+[2026-05-18T12:07:13.307Z] _updateActiveFile called. currentFile: /home/denis/.config/Code/User/settings.json, state.currentFile: null, attachments: []
+[2026-05-18T12:07:19.479Z] _updateActiveFile called. currentFile: /home/denis/.config/Code/User/settings.json, state.currentFile: /home/denis/.config/Code/User/settings.json, attachments: []
+[2026-05-18T12:07:21.489Z] _updateActiveFile called. currentFile: undefined, state.currentFile: /home/denis/.config/Code/User/settings.json, attachments: []
+[2026-05-18T12:07:28.825Z] _updateActiveFile called. currentFile: /home/denis/Programming/VS Code Programs/C++/5th_sem_progs/movie.cpp, state.currentFile: null, attachments: []
+[2026-05-18T12:07:31.870Z] _updateActiveFile called. currentFile: undefined, state.currentFile: /home/denis/Programming/VS Code Programs/C++/5th_sem_progs/movie.cpp, attachments: ["movie.cpp"]

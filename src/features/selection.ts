@@ -31,34 +31,26 @@ export class SelectionWatcher {
     }
 
     const selection = editor.selection;
+    if (selection.isEmpty) {
+      this.currentSelection = null;
+      return;
+    }
+
     const uri = document.uri.fsPath;
     const fileName = path.basename(uri);
     const relativePath = this.workspaceRoot ? path.relative(this.workspaceRoot, uri) : fileName;
 
-    if (selection.isEmpty) {
-      // Fallback: If selection is empty, treat the entire document as the selection
-      const text = document.getText();
-      this.currentSelection = {
-        uri,
-        fileName,
-        relativePath,
-        text,
-        startLine: 1,
-        endLine: document.lineCount
-      };
-    } else {
-      const text = document.getText(selection);
-      const startLine = selection.start.line + 1;
-      const endLine = selection.end.line + 1;
-      this.currentSelection = {
-        uri,
-        fileName,
-        relativePath,
-        text,
-        startLine,
-        endLine
-      };
-    }
+    const text = document.getText(selection);
+    const startLine = selection.start.line + 1;
+    const endLine = selection.end.line + 1;
+    this.currentSelection = {
+      uri,
+      fileName,
+      relativePath,
+      text,
+      startLine,
+      endLine
+    };
   }
 
   public getSelection(): SelectionContext | null {

@@ -91,7 +91,7 @@ export interface ChatState {
   selectedModel: string;
   autoMode: boolean;
   activeTab: 'thread' | 'tasks' | 'edits';
-  currentFile?: string;
+  currentFile?: string | null;
 }
 
 /**
@@ -114,6 +114,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _settingsPanel: SettingsPanel;
   private _lastKeywords: string[] = [];
   private readonly _workspaceRoot: string | undefined;
+  private _autoAttachedFile: string | null = null;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -141,7 +142,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       selectedModel: vscode.workspace.getConfiguration('denix-ai').get<string>('model', 'anthropic/claude-3.5-sonnet'),
       autoMode: true,
       activeTab: 'thread',
-      currentFile: undefined
+      currentFile: null
     };
 
     this._settingsPanel = new SettingsPanel(this._extensionUri);
@@ -1353,24 +1354,48 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const editor = vscode.window.activeTextEditor;
     const currentFile = editor?.document.uri.fsPath;
 
-    if (currentFile && currentFile !== this._state.currentFile) {
-      this._state.currentFile = currentFile;
-      
-      // Auto-add current file to attachments if not already present
-      const fileName = path.basename(currentFile);
-      const existingIndex = this._state.attachments.findIndex(
-        att => att.path === currentFile && att.type === 'file'
+    // Log to a file for remote debugging
+    try {
+      fs.appendFileSync(
+        '/home/denis/projects/Denix-AI/debug.log',
+        `[${new Date().toISOString()}] _updateActiveFile called. currentFile: ${currentFile}, state.currentFile: ${this._state.currentFile}, attachments: ${JSON.stringify(this._state.attachments.map(a => a.name))}\n`
       );
+    } catch (e) {}
 
-      if (existingIndex < 0 && this._view?.visible) {
-        // Auto-attach current file
-        this._handleFileAttach({ path: currentFile });
+    // If active editor changed or closed
+    if (currentFile !== this._state.currentFile) {
+      const oldFile = this._state.currentFile;
+      
+      // 1. Remove the old active file from attachments
+      if (oldFile) {
+        const index = this._state.attachments.findIndex(
+          att => att.path === oldFile && att.type === 'file'
+        );
+        if (index >= 0) {
+          this._state.attachments.splice(index, 1);
+        }
+      }
+
+      // 2. Set the new active file
+      this._state.currentFile = currentFile || null;
+
+      // 3. Attach the new active file if it's a valid local file
+      if (currentFile && editor?.document.uri.scheme === 'file') {
+        const existingIndex = this._state.attachments.findIndex(
+          att => att.path === currentFile && att.type === 'file'
+        );
+
+        if (existingIndex < 0 && this._view?.visible) {
+          // Auto-attach current file
+          this._handleFileAttach({ path: currentFile });
+        } else {
+          this._saveState();
+          this._updateWebviewState();
+        }
       } else {
+        this._saveState();
         this._updateWebviewState();
       }
-    } else if (!currentFile) {
-      this._state.currentFile = undefined;
-      this._updateWebviewState();
     }
   }
 
