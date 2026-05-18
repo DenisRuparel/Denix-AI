@@ -90,8 +90,8 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-            background: #0d1117;
-            color: #e6edf3;
+            background: var(--vscode-editor-background, #0d1117);
+            color: var(--vscode-editor-foreground, #e6edf3);
             height: 100vh;
             display: flex;
             flex-direction: column;
@@ -109,8 +109,8 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
             justify-content: space-between;
             align-items: center;
             padding: 8px 16px;
-            background: #161b22;
-            border-bottom: 1px solid #30363d;
+            background: var(--vscode-sideBar-background, #161b22);
+            border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, #30363d);
             min-height: 40px;
           }
           
@@ -132,17 +132,17 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
             gap: 6px;
             padding: 6px 12px;
             background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--vscode-button-secondaryBorder, rgba(255, 255, 255, 0.08));
             border-radius: 6px;
-            color: #e6edf3;
+            color: var(--vscode-editor-foreground, #e6edf3);
             font-size: 13px;
             cursor: pointer;
             transition: all 0.15s ease;
           }
           
           .memories-toolbar-btn:hover {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: #1f6feb;
+            background: var(--vscode-button-secondaryHoverBackground, rgba(255, 255, 255, 0.08));
+            border-color: var(--vscode-button-background, #1f6feb);
           }
           
           .memories-toolbar-btn svg {
@@ -159,21 +159,21 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
             display: flex;
             align-items: center;
             gap: 8px;
-            color: #8b949e;
+            color: var(--vscode-descriptionForeground, #8b949e);
             font-size: 13px;
           }
           
           .memories-filename-icon {
             width: 16px;
             height: 16px;
-            color: #8b949e;
+            color: var(--vscode-descriptionForeground, #8b949e);
           }
           
           .memories-editor {
             flex: 1;
             padding: 16px;
             overflow: auto;
-            background: #0d1117;
+            background: var(--vscode-editor-background, #0d1117);
           }
           
           #memories-textarea {
@@ -182,7 +182,7 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
             min-height: 400px;
             background: transparent;
             border: none;
-            color: #e6edf3;
+            color: var(--vscode-editor-foreground, #e6edf3);
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 13px;
             line-height: 1.6;
@@ -192,7 +192,7 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
           }
           
           #memories-textarea::placeholder {
-            color: #6e7681;
+            color: var(--vscode-editorHint-foreground, #6e7681);
           }
         </style>
         <title>${fileName}</title>
@@ -205,7 +205,7 @@ export class MemoriesEditorProvider implements vscode.CustomTextEditorProvider {
                 <svg class="memories-filename-icon" viewBox="0 0 16 16" fill="currentColor" style="width: 16px; height: 16px;">
                   <path d="M4 2h8l3 3v9H4V2zm8 1v3h3v8H5V3h7z"/>
                 </svg>
-                <span style="color: #8b949e; font-size: 13px;">${fileName}</span>
+                <span style="color: var(--vscode-descriptionForeground, #8b949e); font-size: 13px;">${fileName}</span>
               </button>
             </div>
           </div>

@@ -2613,7 +2613,13 @@
     const numberRegex = /\b\d+(\.\d+)?\b/g;
     workingLine = workingLine.replace(numberRegex, match => placeholder(match, 'code-number'));
 
-    const keywordRegex = /\b(const|let|var|function|class|return|import|from|if|else|for|while|switch|case|break|try|catch|finally|async|await|type|interface|extends|implements|new|this|super|export|default)\b/g;
+    const preprocessorRegex = /#(include|define|pragma|ifdef|ifndef|endif|if|else|elif)\b/g;
+    workingLine = workingLine.replace(preprocessorRegex, match => placeholder(match, 'code-keyword'));
+
+    const angleStringRegex = /<[^>]+>/g;
+    workingLine = workingLine.replace(angleStringRegex, match => placeholder(match, 'code-string'));
+
+    const keywordRegex = /\b(const|let|var|function|class|return|import|from|if|else|for|while|switch|case|break|try|catch|finally|async|await|type|interface|extends|implements|new|this|super|export|default|using|namespace|public|private|protected|virtual|override|int|char|void|bool|double|float|long|short|unsigned|struct|enum|typedef|auto|cout|cin|endl|std)\b/g;
     workingLine = workingLine.replace(keywordRegex, match => placeholder(match, 'code-keyword'));
 
     let escaped = escapeHtml(workingLine);
