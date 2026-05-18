@@ -148,6 +148,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     // Load persisted state
     this._loadState();
+    void this._persistCurrentThreadSnapshot();
 
     // Listen for active editor changes
     this._setupActiveEditorListener();
@@ -155,6 +156,55 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this._registerWatchers();
     // Prime context attachments
     this._updateContextAttachments().catch(console.error);
+    // Ensure thread index exists (migrate existing threads if needed)
+    this._ensureThreadIndexFromStorage().catch(console.error);
+  }
+
+  /**
+   * Build threads-index from existing workspaceState thread entries if index is empty.
+   */
+  private async _ensureThreadIndexFromStorage(): Promise<void> {
+    try {
+      const existingIndex = await this._getThreadIndex();
+      if (existingIndex && existingIndex.length > 0) {
+        return; // already populated
+      }
+
+      // Find keys in workspaceState that match thread-<id>
+      const keys = this._context.workspaceState.keys();
+      const threadIds = new Set<string>();
+      for (const k of keys) {
+        const m = /^thread-(.+?)(?:-|$)/.exec(k);
+        if (m) {
+          threadIds.add(m[0].replace(/-name$|-pinned$|$/, ''));
+        }
+      }
+
+      const index: Array<{ id: string; title: string; timestamp: number; pinned?: boolean }> = [];
+      for (const idKey of threadIds) {
+        const id = idKey; // e.g. 'thread-12345'
+        const threadData = this._context.workspaceState.get<ChatState>(id);
+        const title = this._context.workspaceState.get<string>(`${id}-name`, this._deriveThreadTitle(threadData, 'Untitled Thread'));
+        const pinned = this._context.workspaceState.get<boolean>(`${id}-pinned`, false);
+        const timestamp = threadData?.messages?.length ? (threadData.messages[threadData.messages.length - 1].timestamp || Date.now()) : Date.now();
+        index.push({ id, title: title || 'Untitled Thread', timestamp, pinned });
+      }
+
+      if (index.length > 0) {
+        // Sort and save
+        index.sort((a, b) => {
+          const pa = a.pinned ? 1 : 0;
+          const pb = b.pinned ? 1 : 0;
+          if (pa !== pb) return pb - pa;
+          return b.timestamp - a.timestamp;
+        });
+        await this._saveThreadIndex(index);
+        // Push update to webview
+        this._updateWebviewState();
+      }
+    } catch (error) {
+      console.error('Failed to ensure thread index from storage:', error);
+    }
   }
 
   private _registerWatchers(): void {
@@ -324,10 +374,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               </button>
               <span class="threads-title">Threads</span>
               <div class="threads-actions">
-                <button class="icon-btn refresh-btn" id="refresh-btn" title="Refresh">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M8 3V1L5 4l3 3V5a5 5 0 110 10 5 5 0 01-5-5h2a3 3 0 103-3z" stroke="currentColor" stroke-width="1" fill="none"/>
-                  </svg>
+                <button class="icon-btn refresh-btn" id="refresh-btn" title="Refresh threads" aria-label="Refresh threads">
+                  <img id="refresh-icon-img" width="16" height="16" alt="Refresh" class="refresh-icon"/>
                 </button>
                 <button class="icon-btn add-thread-btn" id="add-thread-btn" title="New Thread">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -1333,16 +1381,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (this._view) {
       // Include context attachments in state
       const selectionContext = this._selectionWatcher.getSelection();
+      // Include thread index metadata so webview can render sidebar threads
+      const threadIndex = this._context.workspaceState.get<Array<{ id: string; title: string; timestamp: number; pinned?: boolean }>>('threads-index', []);
       const stateWithContext = {
         ...this._state,
         contextAttachments: this._contextAttachments,
         hasSelection: selectionContext !== null,
-        selectionContext
+        selectionContext,
+        threads: threadIndex || []
       };
-      this._sendMessageToWebview({
-        type: 'updateState',
-        data: stateWithContext
-      });
+
+      this._sendMessageToWebview({ type: 'updateState', data: stateWithContext });
     }
   }
 
@@ -1370,6 +1419,32 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private _saveState(): void {
     this._context.globalState.update('denix-ai-state', this._state);
+    // Persist the active thread snapshot so the sidebar can list it
+    void this._persistCurrentThreadSnapshot();
+  }
+
+  /**
+   * Persist the current thread snapshot in workspaceState so the Threads sidebar can render it.
+   */
+  private async _persistCurrentThreadSnapshot(): Promise<void> {
+    try {
+      const threadId = this._state.threadId;
+      const threadKey = `thread-${threadId}`;
+
+      await this._context.workspaceState.update(threadKey, this._state);
+
+      const threadTitle = this._deriveThreadTitle(this._state, 'New Thread');
+      await this._context.workspaceState.update(`${threadKey}-name`, threadTitle);
+
+      const pinned = this._context.workspaceState.get<boolean>(`${threadKey}-pinned`, false);
+      const lastTimestamp = this._state.messages.length > 0
+        ? this._state.messages[this._state.messages.length - 1].timestamp
+        : Date.now();
+
+      await this._addOrUpdateThreadIndexEntry(threadId, threadTitle, pinned, lastTimestamp);
+    } catch (error) {
+      console.error('Failed to persist current thread snapshot:', error);
+    }
   }
 
   /**
@@ -1704,6 +1779,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (threadData) {
       // Store thread name in metadata
       await this._context.workspaceState.update(`thread-${threadId}-name`, newName);
+      // Update index
+      await this._addOrUpdateThreadIndexEntry(threadId, newName);
       vscode.window.showInformationMessage(`Thread renamed to: ${newName}`);
     }
   }
@@ -1712,6 +1789,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Toggle pin status
     const isPinned = this._context.workspaceState.get<boolean>(`thread-${threadId}-pinned`, false);
     await this._context.workspaceState.update(`thread-${threadId}-pinned`, !isPinned);
+    // Update index
+    const title = this._context.workspaceState.get<string>(`thread-${threadId}-name`, '');
+    await this._addOrUpdateThreadIndexEntry(threadId, title || undefined, !isPinned);
     vscode.window.showInformationMessage(isPinned ? 'Thread unpinned' : 'Thread pinned');
   }
 
@@ -1720,6 +1800,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this._context.workspaceState.update(`thread-${threadId}`, undefined);
     await this._context.workspaceState.update(`thread-${threadId}-name`, undefined);
     await this._context.workspaceState.update(`thread-${threadId}-pinned`, undefined);
+    // Update index
+    await this._removeThreadFromIndex(threadId);
 
     // If deleting current thread, create new one
     if (this._state.threadId === threadId) {
@@ -1727,8 +1809,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this._state.messages = [];
       this._state.attachments = [];
       this._saveState();
-      this._updateWebviewState();
     }
+
+    // Refresh the sidebar thread list even when deleting a non-active thread
+    this._updateWebviewState();
 
     vscode.window.showInformationMessage('Thread deleted');
   }
@@ -1772,6 +1856,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
         // Save imported thread
         await this._context.workspaceState.update(`thread-${newThreadId}`, threadData);
+
+        // Save a friendly name if present in thread data
+        const title = this._deriveThreadTitle(threadData, `Imported ${newThreadId}`);
+        await this._context.workspaceState.update(`thread-${newThreadId}-name`, title);
+        await this._addOrUpdateThreadIndexEntry(newThreadId, title, false, Date.now());
 
         // Load the imported thread
         this._state = threadData;
@@ -1956,8 +2045,60 @@ Make it:
     this._state.attachments = [];
     this._contextAttachments = [];
     this._dismissedContextIds.clear();
+    // Save a default name and add to index
+    const title = 'New Thread';
+    this._context.workspaceState.update(`thread-${this._state.threadId}-name`, title);
+    this._addOrUpdateThreadIndexEntry(this._state.threadId, title).catch(console.error);
     this._saveState();
     this._updateWebviewState();
+  }
+
+  /**
+   * Thread index helpers - keep a lightweight index of thread metadata in workspaceState
+   */
+  private async _getThreadIndex(): Promise<Array<{ id: string; title: string; timestamp: number; pinned?: boolean }>> {
+    const idx = this._context.workspaceState.get<Array<{ id: string; title: string; timestamp: number; pinned?: boolean }>>('threads-index', []);
+    return idx || [];
+  }
+
+  private async _saveThreadIndex(index: Array<{ id: string; title: string; timestamp: number; pinned?: boolean }>): Promise<void> {
+    await this._context.workspaceState.update('threads-index', index);
+  }
+
+  private async _addOrUpdateThreadIndexEntry(threadId: string, title?: string, pinned: boolean = false, timestamp?: number): Promise<void> {
+    const index = await this._getThreadIndex();
+    const now = timestamp || Date.now();
+    const existing = index.find(i => i.id === threadId);
+    if (existing) {
+      existing.title = title || existing.title || 'Untitled Thread';
+      existing.pinned = pinned || existing.pinned || false;
+      existing.timestamp = now;
+    } else {
+      index.push({ id: threadId, title: title || 'New Thread', timestamp: now, pinned });
+    }
+    // keep index sorted by pinned then recency
+    index.sort((a, b) => {
+      const pa = a.pinned ? 1 : 0;
+      const pb = b.pinned ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return b.timestamp - a.timestamp;
+    });
+    await this._saveThreadIndex(index);
+  }
+
+  private async _removeThreadFromIndex(threadId: string): Promise<void> {
+    const index = await this._getThreadIndex();
+    const filtered = index.filter(i => i.id !== threadId);
+    await this._saveThreadIndex(filtered);
+  }
+  
+  private _deriveThreadTitle(threadData: ChatState | undefined, fallback: string): string {
+    const firstUserOrAssistant = threadData?.messages?.find(m => typeof m.content === 'string' && m.content.trim().length > 0);
+    const content = firstUserOrAssistant?.content?.trim();
+    if (content) {
+      return content.slice(0, 60).replace(/\s+/g, ' ');
+    }
+    return fallback;
   }
 
   public async triggerFileAttach(): Promise<void> {

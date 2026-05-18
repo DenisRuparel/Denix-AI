@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ChatPanelProvider } from './chatPanel';
+import { SettingsPanel } from './ui/settingsPanel';
 import { MemoriesManager } from './features/memories';
 import { RulesManager } from './features/rules';
 import { GuidelinesManager } from './features/guidelines';
@@ -67,13 +68,26 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  // Register settings panel provider
+  const settingsPanelProvider = new SettingsPanel(
+    context.extensionUri
+  );
+  settingsPanelProvider.setContext(context);
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewPanelSerializer(
+      SettingsPanel.viewType,
+      settingsPanelProvider
+    )
+  );
+
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('denix-ai.newThread', () => provider.createNewThread()),
     vscode.commands.registerCommand('denix-ai.attachFile', () => provider.triggerFileAttach()),
     vscode.commands.registerCommand('denix-ai.attachImage', () => provider.triggerImageAttach()),
     vscode.commands.registerCommand('denix-ai.openMemories', () => provider.openMemories()),
-    vscode.commands.registerCommand('denix-ai.openSettings', () => provider.openSettings()),
+    vscode.commands.registerCommand('denix-ai.openSettings', () => settingsPanelProvider.show()),
     vscode.commands.registerCommand('denix-ai.askQuestion', () => provider.openQuickAsk()),
     vscode.commands.registerCommand('denix-ai.enhancePrompt', () => provider.enhanceCurrentPrompt()),
     vscode.commands.registerCommand('denix-ai.clearContext', () => provider.clearContextAttachments()),

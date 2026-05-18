@@ -154,9 +154,48 @@
 
   // Initialize
   function init() {
+    setupTheme();
     setupEventListeners();
     setupTextareaAutoResize();
+    setupMediaUris();
     sendMessage({ type: 'initialize' });
+  }
+
+  // Setup media URIs for images
+  function setupMediaUris() {
+    const refreshIconImg = document.getElementById('refresh-icon-img');
+    if (refreshIconImg && window.mediaUri) {
+      refreshIconImg.src = `${window.mediaUri}/icons/refresh.png`;
+    }
+  }
+
+  // Setup theme detection and switching
+  function setupTheme() {
+    // Detect VS Code theme from body classList
+    const applyTheme = () => {
+      const isDarkTheme = document.body.classList.contains('vscode-dark') || 
+                         !document.body.classList.contains('vscode-light');
+      
+      const root = document.documentElement;
+      if (isDarkTheme) {
+        root.setAttribute('data-theme', 'dark');
+      } else {
+        root.setAttribute('data-theme', 'light');
+      }
+    };
+
+    // Apply theme immediately
+    applyTheme();
+
+    // Watch for theme changes
+    const observer = new MutationObserver(() => {
+      applyTheme();
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
   }
 
   // Setup event listeners
@@ -662,6 +701,7 @@
     state = { ...state, ...newState };
     renderMessages();
     renderAttachments();
+    loadThreadHistory();
     updateUI();
   }
 
@@ -1262,8 +1302,8 @@
       const threads = group.querySelectorAll('.thread-item');
 
       threads.forEach(item => {
-        const title = item.querySelector('.thread-title')?.textContent.toLowerCase() || '';
-        const preview = item.querySelector('.thread-preview')?.textContent.toLowerCase() || '';
+        const title = item.querySelector('.thread-item-title')?.textContent.toLowerCase() || '';
+        const preview = item.querySelector('.thread-item-preview')?.textContent.toLowerCase() || '';
 
         if (title.includes(searchQuery) || preview.includes(searchQuery)) {
           item.style.display = '';
@@ -1285,25 +1325,19 @@
   // Load thread history
   function loadThreadHistory() {
     if (!elements.threadsContent) return;
+    // Use threads provided in state (sent from extension)
+    const threads = state.threads || [];
 
-    // Mock data - in real implementation, this would come from state
-    const threads = [
-      {
-        id: 'thread-1',
-        title: 'Project summary: Denix AI extension',
-        timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-        active: true
-      },
-      {
-        id: 'thread-2',
-        title: 'New Agent',
-        timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-        active: false
-      }
-    ];
+    // Normalize timestamps to Date
+    const normalized = threads.map(t => ({
+      id: t.id,
+      title: t.title || 'Untitled',
+      timestamp: (typeof t.timestamp === 'number') ? new Date(t.timestamp) : new Date(t.timestamp),
+      pinned: !!t.pinned,
+      active: state.threadId === t.id
+    }));
 
-    // Group threads by time period
-    const groups = groupThreadsByTime(threads);
+    const groups = groupThreadsByTime(normalized);
 
     // Render thread groups
     elements.threadsContent.innerHTML = '';
@@ -1360,15 +1394,23 @@
   // Create thread item element
   function createThreadItem(thread) {
     const item = document.createElement('div');
-    item.className = 'thread-item' + (thread.active ? ' active' : '');
+    item.className = 'thread-item' + (thread.active ? ' active' : '') + (thread.pinned ? ' pinned' : '');
     item.dataset.threadId = thread.id;
+
+    const preview = thread.preview || '';
+    const timeLabel = thread.timestamp ? timeAgo(thread.timestamp) : '';
 
     item.innerHTML = `
       <svg class="thread-item-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
         <path d="M2 2L14 2M2 8L14 8M2 14L14 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
       <div class="thread-item-content">
-        <div class="thread-item-title">${thread.title}</div>
+        <div class="thread-item-title">${escapeHtml(thread.title)}</div>
+        <div class="thread-item-preview">${escapeHtml(preview)}</div>
+      </div>
+      <div class="thread-item-meta">
+        <span class="thread-item-time">${timeLabel}</span>
+        ${thread.pinned ? '<svg class="thread-item-pin" width="12" height="12" viewBox="0 0 16 16' + '" fill="currentColor"><path d="M4.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10z"/></svg>' : ''}
       </div>
       <button class="icon-btn thread-item-menu-btn" data-thread-id="${thread.id}">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -1394,6 +1436,19 @@
     });
 
     return item;
+  }
+
+  // Human readable relative time
+  function timeAgo(date) {
+    const d = new Date(date);
+    const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+    const days = Math.floor(hours / 24);
+    return `${days}d`;
   }
 
   // Show thread context menu
